@@ -1,5 +1,3 @@
-DATEI: components/media/MediaUploader.tsx
-// ============================================================
 'use client';
 import { useRef, useState, DragEvent } from 'react';
 import { useMediaStore } from '@/store/useMediaStore';
