@@ -45,10 +45,22 @@ function AccountsContent() {
 
     if (pagesParam) {
       try {
-        const pages: FacebookPage[] = JSON.parse(decodeURIComponent(pagesParam));
-        savePages(pages);
-        setFbPages(pages);
-        setMessage(`✓ ${pages.length} Facebook ${pages.length === 1 ? 'Page' : 'Pages'} verbunden`);
+        const newPages: FacebookPage[] = JSON.parse(decodeURIComponent(pagesParam));
+        // Bestehende Pages laden und mit neuen zusammenführen (keine Duplikate)
+        const existing = loadPages();
+        const merged = [...existing];
+        for (const p of newPages) {
+          if (!merged.find(e => e.id === p.id)) {
+            merged.push(p);
+          } else {
+            // Token aktualisieren
+            const idx = merged.findIndex(e => e.id === p.id);
+            merged[idx] = p;
+          }
+        }
+        savePages(merged);
+        setFbPages(merged);
+        setMessage(`✓ ${merged.length} Facebook ${merged.length === 1 ? 'Page' : 'Pages'} verbunden`);
       } catch { setMessage('Fehler beim Laden der Pages.'); }
       // URL bereinigen
       window.history.replaceState({}, '', '/accounts');
