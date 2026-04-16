@@ -1,5 +1,3 @@
-DATEI: components/brands/BrandModal.tsx
-// ============================================================
 'use client';
 import { useEffect, useState } from 'react';
 import { Brand, Platform, AiTone } from '@/lib/types';
