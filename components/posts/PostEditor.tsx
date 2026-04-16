@@ -9,6 +9,7 @@ import { useMediaStore }    from '@/store/useMediaStore';
 import { Post, Platform, PostStatus, TemplateType } from '@/lib/types';
 import MediaPicker  from '@/components/media/MediaPicker';
 import AiAssistant  from '@/components/posts/AiAssistant';
+import FacebookPublishButton from '@/components/posts/FacebookPublishButton';
 
 const PLATFORMS: { value: Platform; label: string }[] = [
   { value: 'facebook',  label: 'Facebook'  },
