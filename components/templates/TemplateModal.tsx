@@ -1,5 +1,3 @@
- DATEI: components/templates/TemplateModal.tsx
-// ============================================================
 'use client';
 import { useEffect, useState } from 'react';
 import { Template, TemplateType, Platform } from '@/lib/types';
