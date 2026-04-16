@@ -1,5 +1,3 @@
-DATEI: components/calendar/calendarUtils.ts
-// ============================================================
 export interface CalDay { date: Date; isToday: boolean; isCurrentMonth: boolean; }
 
 export function getMonthGrid(year: number, month: number): CalDay[] {
