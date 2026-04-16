@@ -1,5 +1,3 @@
-DATEI: store/useTemplateStore.ts
-// ============================================================
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { Template, TemplateType } from '@/lib/types';
