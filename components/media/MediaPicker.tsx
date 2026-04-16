@@ -1,5 +1,3 @@
-DATEI: components/media/MediaPicker.tsx
-// ============================================================
 'use client';
 import { useState } from 'react';
 import { useMediaStore } from '@/store/useMediaStore';
