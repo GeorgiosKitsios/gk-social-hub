@@ -1,5 +1,3 @@
-DATEI: lib/aiService.ts
-// ============================================================
 import Anthropic from '@anthropic-ai/sdk';
 
 export type AiMode = 'text' | 'variants' | 'hooks' | 'hashtags';
