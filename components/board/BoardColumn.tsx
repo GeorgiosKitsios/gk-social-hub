@@ -1,5 +1,3 @@
-DATEI: components/board/BoardColumn.tsx
-// ============================================================
 'use client';
 import Link from 'next/link';
 import { useDroppable } from '@dnd-kit/core';
