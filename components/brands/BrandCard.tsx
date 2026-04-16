@@ -1,5 +1,3 @@
-DATEI: components/brands/BrandCard.tsx
-// ============================================================
 'use client';
 import { Brand } from '@/lib/types';
 import { useBrandStore } from '@/store/useBrandStore';
