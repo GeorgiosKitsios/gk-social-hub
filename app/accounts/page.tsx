@@ -1,5 +1,3 @@
-DATEI: app/accounts/page.tsx
-// ============================================================
 'use client';
 import { useBrandStore } from '@/store/useBrandStore';
 import { BrandAvatar }   from '@/components/layout/Topbar';
