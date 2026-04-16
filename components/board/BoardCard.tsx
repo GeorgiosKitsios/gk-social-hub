@@ -1,5 +1,3 @@
-DATEI: components/board/BoardCard.tsx
-// ============================================================
 'use client';
 import Link from 'next/link';
 import { useSortable } from '@dnd-kit/sortable';
