@@ -1,5 +1,3 @@
-DATEI: app/page.tsx  (Dashboard)
-// ============================================================
 'use client';
 import Link from 'next/link';
 import { useBrandStore } from '@/store/useBrandStore';
