@@ -1,8 +1,7 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { Suspense } from 'react';
 import { useBrandStore } from '@/store/useBrandStore';
 import { BrandAvatar }   from '@/components/layout/Topbar';
 
@@ -32,37 +31,36 @@ function AccountsContent() {
   const searchParams = useSearchParams();
   const active = brands.filter(b => !b.archived);
 
-  const [fbPages, setFbPages]   = useState<FacebookPage[]>([]);
-  const [message, setMessage]   = useState<string | null>(null);
+  const [fbPages, setFbPages] = useState<FacebookPage[]>([]);
+  const [message, setMessage] = useState<string | null>(null);
 
   useEffect(() => {
-    // Gespeicherte Pages laden
     setFbPages(loadPages());
 
-    // Pages aus OAuth-Callback verarbeiten
     const pagesParam = searchParams.get('pages');
     const error      = searchParams.get('error');
 
     if (pagesParam) {
       try {
         const newPages: FacebookPage[] = JSON.parse(decodeURIComponent(pagesParam));
-        // Bestehende Pages laden und mit neuen zusammenführen (keine Duplikate)
         const existing = loadPages();
-        const merged = [...existing];
+        const merged   = [...existing];
+
         for (const p of newPages) {
-          if (!merged.find(e => e.id === p.id)) {
+          const idx = merged.findIndex(e => e.id === p.id);
+          if (idx === -1) {
             merged.push(p);
           } else {
-            // Token aktualisieren
-            const idx = merged.findIndex(e => e.id === p.id);
             merged[idx] = p;
           }
         }
+
         savePages(merged);
         setFbPages(merged);
         setMessage(`✓ ${merged.length} Facebook ${merged.length === 1 ? 'Page' : 'Pages'} verbunden`);
-      } catch { setMessage('Fehler beim Laden der Pages.'); }
-      // URL bereinigen
+      } catch {
+        setMessage('Fehler beim Laden der Pages.');
+      }
       window.history.replaceState({}, '', '/accounts');
     }
 
@@ -121,7 +119,6 @@ function AccountsContent() {
           </a>
         </div>
 
-        {/* Verbundene Pages */}
         {fbPages.length > 0 && (
           <div className="flex flex-col gap-2">
             {fbPages.map(page => (
@@ -165,7 +162,7 @@ function AccountsContent() {
             </div>
             <div className="flex flex-col gap-1.5">
               {brand.platforms.map(p => {
-                const label = p === 'facebook' ? 'Facebook' : p === 'instagram' ? 'Instagram' : 'TikTok';
+                const label     = p === 'facebook' ? 'Facebook' : p === 'instagram' ? 'Instagram' : 'TikTok';
                 const connected = p === 'facebook' && fbPages.length > 0;
                 return (
                   <div key={p} className="flex items-center justify-between py-1.5 border-t border-neutral-700/50">
