@@ -1,5 +1,3 @@
-DATEI: components/posts/PostEditor.tsx
-// ============================================================
 'use client';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
