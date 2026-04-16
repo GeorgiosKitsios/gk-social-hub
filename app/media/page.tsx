@@ -1,5 +1,3 @@
-DATEI: app/media/page.tsx
-// ============================================================
 'use client';
 import { useState } from 'react';
 import { useMediaStore } from '@/store/useMediaStore';
