@@ -1,5 +1,3 @@
-DATEI: components/media/MediaCard.tsx
-// ============================================================
 'use client';
 import { useState } from 'react';
 import { Media } from '@/lib/types';
