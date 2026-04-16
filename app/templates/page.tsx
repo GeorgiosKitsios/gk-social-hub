@@ -1,5 +1,3 @@
-DATEI: app/templates/page.tsx
-// ============================================================
 'use client';
 import { useState } from 'react';
 import { useTemplateStore } from '@/store/useTemplateStore';
