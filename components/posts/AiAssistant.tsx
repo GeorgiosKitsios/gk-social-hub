@@ -1,5 +1,3 @@
-DATEI: components/posts/AiAssistant.tsx
-// ============================================================
 'use client';
 import { useState } from 'react';
 import { generateAiContent, AiMode, AiTone } from '@/lib/aiService';
