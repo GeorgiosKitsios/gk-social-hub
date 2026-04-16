@@ -1,7 +1,9 @@
 import Anthropic from '@anthropic-ai/sdk';
 
 export type AiMode = 'text' | 'variants' | 'hooks' | 'hashtags';
-export type { AiTone } from './types';
+
+// AiTone direkt hier definiert (kein Re-Export aus types.ts)
+export type AiTone = 'professionell' | 'locker' | 'motivierend' | 'aggressiv';
 
 export interface AiRequest {
   prompt:    string;
@@ -72,9 +74,12 @@ function parseResponse(mode: AiMode, raw: string): string[] {
 
 export async function generateAiContent(req: AiRequest): Promise<AiResult> {
   const apiKey = process.env.NEXT_PUBLIC_ANTHROPIC_API_KEY;
-  if (!apiKey) throw new Error('Kein API-Key. Bitte NEXT_PUBLIC_ANTHROPIC_API_KEY in .env.local setzen.');
+  if (!apiKey) {
+    throw new Error('Kein API-Key. Bitte NEXT_PUBLIC_ANTHROPIC_API_KEY in .env.local setzen.');
+  }
 
   const client = new Anthropic({ apiKey, dangerouslyAllowBrowser: true });
+
   const message = await client.messages.create({
     model:      'claude-sonnet-4-20250514',
     max_tokens: 1024,
