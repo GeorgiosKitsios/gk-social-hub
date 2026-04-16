@@ -1,5 +1,3 @@
-DATEI: lib/types.ts
-// ============================================================
 export type Platform = 'facebook' | 'instagram' | 'tiktok';
 
 export type BrandColor = string;
