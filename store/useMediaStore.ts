@@ -1,5 +1,3 @@
-DATEI: store/useMediaStore.ts
-// ============================================================
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { Media } from '@/lib/types';
