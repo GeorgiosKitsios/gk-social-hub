@@ -1,5 +1,3 @@
-DATEI: store/usePostStore.ts
-// ============================================================
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { Post, PostStatus } from '@/lib/types';
