@@ -1,5 +1,3 @@
-DATEI: components/calendar/CalendarPostChip.tsx
-// ============================================================
 'use client';
 import Link from 'next/link';
 import { Post, PostStatus } from '@/lib/types';
