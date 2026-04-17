@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useMediaStore } from '@/store/useMediaStore';
 
 interface FacebookPage {
   id:           string;
@@ -10,7 +11,7 @@ interface FacebookPage {
 
 interface Props {
   message:    string;
-  imageUrl?:  string;
+  mediaIds?:  string[];
   onSuccess?: (postId: string, pageName: string) => void;
   onError?:   (error: string) => void;
 }
@@ -22,19 +23,21 @@ function loadPages(): FacebookPage[] {
   } catch { return []; }
 }
 
-export default function FacebookPublishButton({ message, imageUrl, onSuccess, onError }: Props) {
-  const [loading,      setLoading]      = useState(false);
-  const [showPicker,   setShowPicker]   = useState(false);
-  const [results,      setResults]      = useState<{ page: string; success: boolean; error?: string }[]>([]);
+export default function FacebookPublishButton({ message, mediaIds = [], onSuccess, onError }: Props) {
+  const [loading,    setLoading]    = useState(false);
+  const [showPicker, setShowPicker] = useState(false);
+  const [results,    setResults]    = useState<{ page: string; success: boolean; error?: string }[]>([]);
 
+  const { getById } = useMediaStore();
   const pages = loadPages();
+
+  // Erstes Bild holen falls vorhanden
+  const firstMedia = mediaIds.length > 0 ? getById(mediaIds[0]) : null;
+  const imageBase64 = firstMedia?.type === 'image' ? firstMedia.url : undefined;
 
   if (pages.length === 0) {
     return (
-      <a
-        href="/accounts"
-        className="text-xs text-blue-400 hover:text-blue-300 transition-colors"
-      >
+      <a href="/accounts" className="text-xs text-blue-400 hover:text-blue-300 transition-colors">
         Facebook verbinden →
       </a>
     );
@@ -43,14 +46,14 @@ export default function FacebookPublishButton({ message, imageUrl, onSuccess, on
   async function publishToPage(page: FacebookPage) {
     setLoading(true);
     try {
-      const res = await fetch('/api/facebook/publish', {
+      const res = await fetch('/api/facebook/upload', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify({
-          pageId:     page.id,
-          pageToken:  page.access_token,
+          pageId:      page.id,
+          pageToken:   page.access_token,
           message,
-          imageUrl,
+          imageBase64,
         }),
       });
       const data = await res.json();
@@ -81,6 +84,15 @@ export default function FacebookPublishButton({ message, imageUrl, onSuccess, on
 
   return (
     <div className="flex flex-col gap-2">
+
+      {/* Bild-Info */}
+      {imageBase64 && (
+        <div className="text-xs text-neutral-500 flex items-center gap-1.5">
+          <span>🖼</span>
+          <span>1 Bild wird mitgepostet</span>
+        </div>
+      )}
+
       {/* Ergebnisse */}
       {results.length > 0 && (
         <div className="flex flex-col gap-1">
@@ -103,11 +115,10 @@ export default function FacebookPublishButton({ message, imageUrl, onSuccess, on
             disabled={loading || !message.trim()}
             className="flex-1 text-xs py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-1.5"
           >
-            {loading ? (
-              <><div className="w-3 h-3 border border-white border-t-transparent rounded-full animate-spin" /> Wird gepostet...</>
-            ) : (
-              <>📘 Auf {pages[0].name} posten</>
-            )}
+            {loading
+              ? <><div className="w-3 h-3 border border-white border-t-transparent rounded-full animate-spin" /> Wird gepostet...</>
+              : <>📘 Auf {pages[0].name} posten</>
+            }
           </button>
         ) : (
           <>
@@ -116,11 +127,10 @@ export default function FacebookPublishButton({ message, imageUrl, onSuccess, on
               disabled={loading || !message.trim()}
               className="flex-1 text-xs py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-1.5"
             >
-              {loading ? (
-                <><div className="w-3 h-3 border border-white border-t-transparent rounded-full animate-spin" /> Wird gepostet...</>
-              ) : (
-                <>📘 Auf alle Pages ({pages.length}) posten</>
-              )}
+              {loading
+                ? <><div className="w-3 h-3 border border-white border-t-transparent rounded-full animate-spin" /> Wird gepostet...</>
+                : <>📘 Auf alle Pages ({pages.length}) posten</>
+              }
             </button>
             <button
               onClick={() => setShowPicker(o => !o)}
