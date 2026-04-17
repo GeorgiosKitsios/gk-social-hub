@@ -3,7 +3,6 @@ import { NextRequest, NextResponse } from 'next/server';
 export async function POST(request: NextRequest) {
   try {
     const { pageId, pageToken, videoBase64, message, postType } = await request.json();
-    // postType: 'feed' | 'reels'
 
     if (!pageId || !pageToken || !videoBase64) {
       return NextResponse.json({ error: 'pageId, pageToken und videoBase64 erforderlich' }, { status: 400 });
@@ -14,43 +13,59 @@ export async function POST(request: NextRequest) {
     const buffer     = Buffer.from(base64Data, 'base64');
     const mimeMatch  = videoBase64.match(/^data:(video\/\w+);base64,/);
     const mimeType   = mimeMatch ? mimeMatch[1] : 'video/mp4';
-
-    const isReel = postType === 'reels';
-
-    // Endpoint je nach Typ
-    const uploadEndpoint = isReel
-      ? `https://graph.facebook.com/v19.0/${pageId}/video_reels`
-      : `https://graph.facebook.com/v19.0/${pageId}/videos`;
-
-    // FormData mit Video
-    const formData = new FormData();
-    const blob     = new Blob([buffer], { type: mimeType });
-    formData.append('source',       blob, 'video.mp4');
-    formData.append('description',  message ?? '');
-    formData.append('access_token', pageToken);
+    const isReel     = postType === 'reels';
 
     if (isReel) {
-      formData.append('upload_phase', 'finish');
-    }
+      // ── Reels: 3-stufiger Prozess ──
 
-    const uploadRes  = await fetch(uploadEndpoint, { method: 'POST', body: formData });
-    const uploadData = await uploadRes.json();
+      // Schritt 1: Upload-Session starten
+      const initRes = await fetch(
+        `https://graph.facebook.com/v19.0/${pageId}/video_reels`,
+        {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            upload_phase: 'start',
+            access_token: pageToken,
+          }),
+        }
+      );
+      const initData = await initRes.json();
 
-    if (uploadData.error) {
-      console.error('Facebook video upload error:', uploadData.error);
-      return NextResponse.json({ error: uploadData.error.message }, { status: 400 });
-    }
+      if (initData.error || !initData.video_id || !initData.upload_url) {
+        console.error('Reel init error:', initData);
+        return NextResponse.json({ error: initData.error?.message ?? 'Reel-Upload konnte nicht gestartet werden' }, { status: 400 });
+      }
 
-    // Bei Reels: Veröffentlichung anstoßen
-    if (isReel && uploadData.video_id) {
+      const { video_id, upload_url } = initData;
+
+      // Schritt 2: Video hochladen
+      const uploadRes = await fetch(upload_url, {
+        method:  'POST',
+        headers: {
+          'Authorization':        `OAuth ${pageToken}`,
+          'Content-Type':         mimeType,
+          'offset':               '0',
+          'file_size':            buffer.byteLength.toString(),
+        },
+        body: buffer,
+      });
+
+      if (!uploadRes.ok) {
+        const errText = await uploadRes.text();
+        console.error('Reel upload error:', errText);
+        return NextResponse.json({ error: 'Video-Upload fehlgeschlagen' }, { status: 400 });
+      }
+
+      // Schritt 3: Veröffentlichen
       const publishRes = await fetch(
         `https://graph.facebook.com/v19.0/${pageId}/video_reels`,
         {
           method:  'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            video_id:     uploadData.video_id,
             upload_phase: 'finish',
+            video_id,
             video_state:  'PUBLISHED',
             description:  message ?? '',
             access_token: pageToken,
@@ -58,13 +73,35 @@ export async function POST(request: NextRequest) {
         }
       );
       const publishData = await publishRes.json();
+
       if (publishData.error) {
+        console.error('Reel publish error:', publishData.error);
         return NextResponse.json({ error: publishData.error.message }, { status: 400 });
       }
-      return NextResponse.json({ success: true, postId: publishData.id ?? uploadData.video_id, type: 'reel' });
-    }
 
-    return NextResponse.json({ success: true, postId: uploadData.id, type: 'video' });
+      return NextResponse.json({ success: true, postId: video_id, type: 'reel' });
+
+    } else {
+      // ── Feed-Video: einfacher Upload ──
+      const formData = new FormData();
+      const blob     = new Blob([buffer], { type: mimeType });
+      formData.append('source',       blob, 'video.mp4');
+      formData.append('description',  message ?? '');
+      formData.append('access_token', pageToken);
+
+      const uploadRes  = await fetch(
+        `https://graph.facebook.com/v19.0/${pageId}/videos`,
+        { method: 'POST', body: formData }
+      );
+      const uploadData = await uploadRes.json();
+
+      if (uploadData.error) {
+        console.error('Feed video error:', uploadData.error);
+        return NextResponse.json({ error: uploadData.error.message }, { status: 400 });
+      }
+
+      return NextResponse.json({ success: true, postId: uploadData.id, type: 'video' });
+    }
 
   } catch (err) {
     console.error('Video upload error:', err);
