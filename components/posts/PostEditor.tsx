@@ -362,33 +362,33 @@ export default function PostEditor({ postId, presetDate }: Props) {
               <span className="text-neutral-500">{templateOpen ? '▲' : '▼'}</span>
             </button>
             {templateOpen && (
-              <div className="bg-neutral-900 p-3">
-                <div className="flex gap-1 mb-3">
+              <div className="bg-neutral-900 p-4">
+                <div className="flex gap-2 mb-4 flex-wrap">
                   {TEMPLATE_TABS.map(t => (
                     <button
                       key={t.value}
                       onClick={() => setTemplateTab(t.value)}
-                      className={`px-3 py-1 text-xs rounded-md transition-colors ${
-                        templateTab === t.value ? 'bg-neutral-700 text-white' : 'text-neutral-500 hover:text-white'
+                      className={`px-4 py-2 text-sm rounded-lg transition-colors ${
+                        templateTab === t.value ? 'bg-neutral-700 text-white' : 'text-neutral-500 hover:text-white bg-neutral-800'
                       }`}
                     >
                       {t.label}
                     </button>
                   ))}
                 </div>
-                <div className="flex flex-col gap-2 max-h-48 overflow-y-auto">
+                <div className="flex flex-col gap-3 max-h-72 overflow-y-auto">
                   {tabTemplates.length === 0 && (
-                    <p className="text-xs text-neutral-600 text-center py-4">Keine Vorlagen für diesen Typ.</p>
+                    <p className="text-sm text-neutral-600 text-center py-4">Keine Vorlagen für diesen Typ.</p>
                   )}
                   {tabTemplates.map(t => (
-                    <div key={t.id} className="flex items-start gap-2 p-2 bg-neutral-800 rounded-lg">
+                    <div key={t.id} className="flex items-start gap-3 p-3 bg-neutral-800 rounded-lg">
                       <div className="flex-1 min-w-0">
-                        <div className="text-xs font-medium text-white mb-0.5">{t.name}</div>
-                        <div className="text-xs text-neutral-500 line-clamp-2 whitespace-pre-wrap">{t.content}</div>
+                        <div className="text-sm font-medium text-white mb-1">{t.name}</div>
+                        <div className="text-sm text-neutral-400 line-clamp-2 whitespace-pre-wrap">{t.content}</div>
                       </div>
                       <button
                         onClick={() => insertTemplate(t.content, t.id)}
-                        className="text-xs px-2.5 py-1 rounded border border-neutral-600 text-neutral-400 hover:text-white hover:border-blue-500 transition-colors shrink-0"
+                        className="text-sm px-3 py-1.5 rounded-lg border border-neutral-600 text-neutral-300 hover:text-white hover:border-blue-500 transition-colors shrink-0"
                       >
                         Einfügen
                       </button>
