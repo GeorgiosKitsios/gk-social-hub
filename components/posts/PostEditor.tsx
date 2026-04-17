@@ -241,10 +241,10 @@ export default function PostEditor({ postId, presetDate }: Props) {
           )}
 
       {/* Hauptbereich */}
-      <div className="flex flex-1 overflow-hidden">
+      <div className="flex flex-1 overflow-hidden min-h-0">
 
         {/* Linke Spalte */}
-        <div className="flex-1 overflow-y-auto p-5 flex flex-col gap-5">
+        <div className="flex-1 overflow-y-auto p-5 flex flex-col gap-5 min-w-0">
 
           {/* Titel */}
           <div>
@@ -429,7 +429,7 @@ export default function PostEditor({ postId, presetDate }: Props) {
         </div>
 
         {/* Rechte Spalte */}
-        <div className="w-60 shrink-0 border-l border-neutral-800 bg-neutral-950 overflow-y-auto p-4 flex flex-col gap-5">
+        <div className="w-52 shrink-0 border-l border-neutral-800 bg-neutral-950 overflow-y-auto p-3 flex flex-col gap-4">
 
           {/* Status */}
           <div>
