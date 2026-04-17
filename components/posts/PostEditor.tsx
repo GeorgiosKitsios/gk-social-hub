@@ -229,19 +229,16 @@ export default function PostEditor({ postId, presetDate }: Props) {
       </div>
 
       {/* Facebook Publishing – nur sichtbar wenn Plattform Facebook ausgewählt */}
-      {form.platforms.includes('facebook') && (
-        <div className="px-5 py-2 border-b border-neutral-800 bg-neutral-950">
-          <FacebookPublishButton
-            message={form.mainText}
-            onSuccess={(postId, pageName) => {
-              handleSave('published');
-            }}
-            onError={(error) => {
-              console.error('Facebook publish error:', error);
-            }}
-          />
-        </div>
-      )}
+          {form.platforms.includes('facebook') && (
+            <div className="px-5 py-2 border-b border-neutral-800 bg-neutral-950">
+              <FacebookPublishButton
+                message={form.mainText}
+                mediaIds={form.mediaIds}
+                onSuccess={() => handleSave('published')}
+                onError={(error) => console.error('Facebook publish error:', error)}
+              />
+            </div>
+          )}
 
       {/* Hauptbereich */}
       <div className="flex flex-1 overflow-hidden">
@@ -539,5 +536,7 @@ export default function PostEditor({ postId, presetDate }: Props) {
         />
       )}
     </div>
+  );
+}
   );
 }
