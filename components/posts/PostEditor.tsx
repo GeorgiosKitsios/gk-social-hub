@@ -538,5 +538,3 @@ export default function PostEditor({ postId, presetDate }: Props) {
     </div>
   );
 }
-  );
-}
