@@ -17,8 +17,8 @@ const KNOWN_PAGES = [
 ];
 
 export default function AdminTokensPage() {
-  const [tokens, setTokens]   = useState<Record<string, string>>({});
-  const [saved,  setSaved]    = useState(false);
+  const [tokens,  setTokens]  = useState<Record<string, string>>({});
+  const [saved,   setSaved]   = useState(false);
   const [current, setCurrent] = useState<FacebookPage[]>([]);
 
   useEffect(() => {
@@ -37,12 +37,7 @@ export default function AdminTokensPage() {
   function handleSave() {
     const pages: FacebookPage[] = KNOWN_PAGES
       .filter(p => tokens[p.id]?.trim())
-      .map(p => ({
-        id:           p.id,
-        name:         p.name,
-        access_token: tokens[p.id].trim(),
-      }));
-
+      .map(p => ({ id: p.id, name: p.name, access_token: tokens[p.id].trim() }));
     localStorage.setItem(STORAGE_KEY, JSON.stringify(pages));
     setCurrent(pages);
     setSaved(true);
@@ -57,19 +52,52 @@ export default function AdminTokensPage() {
 
   return (
     <div className="p-6 max-w-2xl mx-auto">
+
+      {/* Header */}
       <div className="mb-6">
-        <h1 className="text-xl font-semibold text-white">Facebook Token Manager</h1>
+        <h1 className="text-xl font-semibold text-white">🔑 Token Manager</h1>
         <p className="text-sm text-neutral-400 mt-0.5">
-          Page Access Tokens manuell eintragen
+          Facebook Page Access Tokens verwalten · laufen nach ~60 Tagen ab
         </p>
+      </div>
+
+      {/* Quick Links */}
+      <div className="bg-neutral-800 border border-neutral-700 rounded-xl p-4 mb-6">
+        <div className="text-sm font-medium text-white mb-3">Token erneuern</div>
+        <div className="flex flex-col gap-2">
+
+          {/* Facebook */}
+          <a
+            href="https://developers.facebook.com/tools/explorer"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-3 px-4 py-3 bg-blue-600/10 hover:bg-blue-600/20 border border-blue-500/30 rounded-lg transition-colors"
+          >
+            <span className="text-lg">📘</span>
+            <div>
+              <div className="text-sm font-medium text-blue-400">Facebook Graph API Explorer öffnen</div>
+              <div className="text-xs text-neutral-500 mt-0.5">
+                1. App „GK Social Hub" wählen → 2. Generate Access Token → 3. GET /me/accounts → 4. Token kopieren
+              </div>
+            </div>
+            <span className="ml-auto text-neutral-500 text-xs">↗</span>
+          </a>
+
+          {/* Instagram – kommt später */}
+          <div className="flex items-center gap-3 px-4 py-3 bg-neutral-900 border border-neutral-700 rounded-lg opacity-50">
+            <span className="text-lg">📸</span>
+            <div>
+              <div className="text-sm font-medium text-neutral-400">Instagram Token erneuern</div>
+              <div className="text-xs text-neutral-600 mt-0.5">Folgt mit Instagram-Anbindung in Phase 3</div>
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* Aktueller Status */}
       {current.length > 0 && (
         <div className="mb-6 bg-green-500/10 border border-green-500/20 rounded-xl p-4">
-          <div className="text-sm font-medium text-green-400 mb-2">
-            ✓ {current.length} Pages gespeichert
-          </div>
+          <div className="text-sm font-medium text-green-400 mb-2">✓ {current.length} Pages gespeichert</div>
           {current.map(p => (
             <div key={p.id} className="text-xs text-neutral-400">
               {p.name} · ID: {p.id}
@@ -83,10 +111,8 @@ export default function AdminTokensPage() {
         {KNOWN_PAGES.map(page => (
           <div key={page.id} className="bg-neutral-800 border border-neutral-700 rounded-xl p-4">
             <div className="text-sm font-medium text-white mb-1">{page.name}</div>
-            <div className="text-xs text-neutral-500 mb-3">ID: {page.id}</div>
-            <label className="block text-xs text-neutral-400 mb-1">
-              Page Access Token
-            </label>
+            <div className="text-xs text-neutral-500 mb-3">Page ID: {page.id}</div>
+            <label className="block text-xs text-neutral-400 mb-1">Page Access Token</label>
             <textarea
               value={tokens[page.id] ?? ''}
               onChange={e => setTokens(t => ({ ...t, [page.id]: e.target.value }))}
@@ -94,6 +120,12 @@ export default function AdminTokensPage() {
               placeholder="EAAUUtbZ..."
               className="w-full bg-neutral-900 border border-neutral-600 rounded-lg px-3 py-2 text-xs text-white placeholder-neutral-600 focus:outline-none focus:border-blue-500 resize-none font-mono"
             />
+            {/* Token-Status */}
+            {current.find(p => p.id === page.id) ? (
+              <div className="text-xs text-green-400 mt-1">✓ Token gespeichert</div>
+            ) : (
+              <div className="text-xs text-neutral-600 mt-1">– Kein Token</div>
+            )}
           </div>
         ))}
       </div>
@@ -115,7 +147,7 @@ export default function AdminTokensPage() {
       </div>
 
       <p className="text-xs text-neutral-600 mt-4 text-center">
-        Tokens aus dem Graph API Explorer eintragen · Laufen nach ~60 Tagen ab
+        Tokens laufen nach ~60 Tagen ab · Long-Lived Tokens folgen in Phase 3
       </p>
     </div>
   );
