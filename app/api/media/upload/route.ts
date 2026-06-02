@@ -51,7 +51,7 @@ export async function POST(req: NextRequest) {
   }
 
   // ── Schritt 3: Datei direkt in Supabase Storage hochladen ────
-  const ext         = file.name.split('.').pop()?.toLowerCase() ?? 'bin';
+  const ext         = file?.name ? file.name.split('.').pop()?.toLowerCase() ?? 'jpg' : 'jpg';
   const storagePath = `${brandId}/${crypto.randomUUID()}.${ext}`;
   console.log('[upload] Schritt 3 – Storage Upload:', { path: storagePath, type: file.type, size: file.size });
 

@@ -1,9 +1,13 @@
 'use client';
 import { useRef, useState, DragEvent } from 'react';
 import { useMediaStore } from '@/store/useMediaStore';
+import { useBrandStore } from '@/store/useBrandStore';
 
-export default function MediaUploader({ brandId, onUploaded }: { brandId: string; onUploaded?: (id: string) => void }) {
+export default function MediaUploader({ brandId: brandIdProp, onUploaded }: { brandId: string; onUploaded?: (id: string) => void }) {
   const { fetchByBrand } = useMediaStore();
+  const { activeBrandId } = useBrandStore();
+  // activeBrandId aus dem Store ist immer ein reiner String – sicherer als der Prop
+  const brandId = typeof activeBrandId === 'string' && activeBrandId ? activeBrandId : (brandIdProp ?? '');
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
   const [uploading, setUploading] = useState(false);
