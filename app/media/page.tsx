@@ -12,8 +12,8 @@ export default function MediaPage() {
   const { activeBrandId, activeBrand }  = useBrandStore();
   const brandId  = activeBrandId ?? '';
   const brand    = activeBrand();
-  const allMedia = getByBrand(brandId);
-  const allTags  = getTagsForBrand(brandId);
+  const allMedia = getByBrand?.(brandId) ?? [];
+  const allTags  = getTagsForBrand?.(brandId) ?? [];
   const [typeFilter, setTypeFilter]   = useState<TypeFilter>('all');
   const [activeTags, setActiveTags]   = useState<string[]>([]);
   const [showUpload, setShowUpload]   = useState(false);
