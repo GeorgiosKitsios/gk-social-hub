@@ -16,24 +16,35 @@ export const useMediaStore = create<MediaStore>()((set, get) => ({
   media: [],
   loading: false,
 
-  getById: (id) =>
-    get().media.find(m => m.id === id),
+  getById: (id) => {
+    const media = get().media;
+    return Array.isArray(media) ? media.find(m => m.id === id) : undefined;
+  },
 
-  getByBrand: (brandId) =>
-    get().media.filter(m => m.brandId === brandId),
+  getByBrand: (brandId) => {
+    const media = get().media;
+    return Array.isArray(media) ? media.filter(m => m.brandId === brandId) : [];
+  },
 
-  getTagsForBrand: (brandId) =>
-    Array.from(new Set(
-      get().media
+  getTagsForBrand: (brandId) => {
+    const media = get().media;
+    if (!Array.isArray(media)) return [];
+    return Array.from(new Set(
+      media
         .filter(m => m.brandId === brandId)
         .flatMap(m => m.tags ?? [])
-    )),
+    ));
+  },
 
   fetchByBrand: async (brandId) => {
     set({ loading: true });
-    const res = await fetch(`/api/media?brandId=${brandId}`);
-    const data = await res.json();
-    set({ media: data, loading: false });
+    try {
+      const res  = await fetch(`/api/media?brandId=${brandId}`);
+      const data = await res.json();
+      set({ media: Array.isArray(data) ? data : [], loading: false });
+    } catch {
+      set({ loading: false });
+    }
   },
 
   addMedia: async (brandId, file, tags) => {
