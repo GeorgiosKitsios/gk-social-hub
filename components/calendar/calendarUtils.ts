@@ -21,3 +21,7 @@ export function formatMonthLabel(year: number, month: number) { return new Date(
 export function formatWeekLabel(anchor: Date) { const mon=getMonday(anchor),sun=new Date(mon);sun.setDate(mon.getDate()+6);const o: Intl.DateTimeFormatOptions={day:'2-digit',month:'short'};return`${mon.toLocaleDateString('de-DE',o)} – ${sun.toLocaleDateString('de-DE',o)}`; }
 export function formatTime(iso: string) { return new Date(iso).toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'}); }
 export const WEEKDAY_LABELS = ['Mo','Di','Mi','Do','Fr','Sa','So'];
+export function formatDayLabel(date: Date): string {
+  return date.toLocaleDateString('de-DE', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' });
+}
+export const HOURS: number[] = Array.from({ length: 24 }, (_, i) => i);

@@ -11,12 +11,14 @@ import {
   getWeekDays,
   formatMonthLabel,
   formatWeekLabel,
+  formatDayLabel,
   isSameDay,
   WEEKDAY_LABELS,
+  HOURS,
   CalDay,
 } from '@/components/calendar/calendarUtils';
 
-type CalView = 'month' | 'week';
+type CalView = 'month' | 'week' | 'day';
 
 function newPostUrl(date: Date): string {
   return `/posts/new?date=${date.toISOString().slice(0, 10)}`;
@@ -97,6 +99,73 @@ function WeekCell({ day, posts, brandColor, onClick }: CellProps) {
   );
 }
 
+function DayView({
+  anchor, allDayPosts, brandColor, onHourClick,
+}: {
+  anchor:      Date;
+  allDayPosts: Post[];
+  brandColor:  string;
+  onHourClick: (hour: number) => void;
+}) {
+  const timedPosts   = allDayPosts.filter(p => !!p.scheduledAt);
+  const untimedPosts = allDayPosts.filter(p => !p.scheduledAt);
+
+  function postsAtHour(h: number): Post[] {
+    return timedPosts.filter(p => new Date(p.scheduledAt!).getHours() === h);
+  }
+
+  return (
+    <div className="flex flex-col rounded-xl border border-neutral-800 overflow-hidden">
+      {/* Nicht geplant */}
+      {untimedPosts.length > 0 && (
+        <div className="border-b border-neutral-700 bg-neutral-900 px-4 py-2">
+          <p className="text-xs text-neutral-500 mb-1.5">Nicht geplant</p>
+          <div className="flex flex-wrap gap-1.5">
+            {untimedPosts.map(p => (
+              <CalendarPostChip key={p.id} post={p} brandColor={brandColor} />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Stündliche Zeilen */}
+      {HOURS.map(h => {
+        const hPosts = postsAtHour(h);
+        const isEmpty = hPosts.length === 0;
+        return (
+          <div
+            key={h}
+            className={`flex items-start gap-3 border-b border-neutral-800/60 px-4 min-h-[48px] transition-colors ${
+              isEmpty ? 'hover:bg-neutral-800/40 cursor-pointer group' : 'bg-neutral-900'
+            }`}
+            onClick={() => isEmpty && onHourClick(h)}
+          >
+            {/* Uhrzeit-Label */}
+            <span className="text-xs text-neutral-600 w-10 shrink-0 pt-3 group-hover:text-neutral-400 transition-colors">
+              {String(h).padStart(2, '0')}:00
+            </span>
+
+            {/* Posts oder leeres Feld */}
+            <div
+              className="flex flex-wrap gap-1.5 flex-1 py-2"
+              onClick={e => !isEmpty && e.stopPropagation()}
+            >
+              {hPosts.map(p => (
+                <CalendarPostChip key={p.id} post={p} brandColor={brandColor} />
+              ))}
+              {isEmpty && (
+                <span className="text-xs text-neutral-700 opacity-0 group-hover:opacity-100 transition-opacity pt-0.5">
+                  + Neuer Post um {String(h).padStart(2, '0')}:00
+                </span>
+              )}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 export default function CalendarPage() {
   const router = useRouter();
   const { posts }                      = usePostStore();
@@ -110,6 +179,7 @@ export default function CalendarPage() {
   const [year,       setYear]       = useState(today.getFullYear());
   const [month,      setMonth]      = useState(today.getMonth());
   const [weekAnchor, setWeekAnchor] = useState(today);
+  const [dayAnchor,  setDayAnchor]  = useState(today);
 
   const scheduledPosts = useMemo(() =>
     posts.filter(p =>
@@ -138,9 +208,15 @@ export default function CalendarPage() {
   function nextWeek() {
     setWeekAnchor(d => { const n = new Date(d); n.setDate(n.getDate() + 7); return n; });
   }
+  function prevDay() {
+    setDayAnchor(d => { const n = new Date(d); n.setDate(n.getDate() - 1); return n; });
+  }
+  function nextDay() {
+    setDayAnchor(d => { const n = new Date(d); n.setDate(n.getDate() + 1); return n; });
+  }
   function goToday() {
     const n = new Date();
-    setYear(n.getFullYear()); setMonth(n.getMonth()); setWeekAnchor(n);
+    setYear(n.getFullYear()); setMonth(n.getMonth()); setWeekAnchor(n); setDayAnchor(n);
   }
 
   const monthGrid = useMemo(() => getMonthGrid(year, month),  [year, month]);
@@ -153,12 +229,12 @@ export default function CalendarPage() {
         <div>
           <h1 className="text-xl font-semibold text-white">Kalender</h1>
           <p className="text-sm text-neutral-400 mt-0.5">
-            {brand?.name ?? '–'} · {view === 'month' ? formatMonthLabel(year, month) : formatWeekLabel(weekAnchor)}
+            {brand?.name ?? '–'} · {view === 'month' ? formatMonthLabel(year, month) : view === 'week' ? formatWeekLabel(weekAnchor) : formatDayLabel(dayAnchor)}
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           <div className="flex gap-1 bg-neutral-800 p-1 rounded-lg">
-            {(['month', 'week'] as CalView[]).map(v => (
+            {(['month', 'week', 'day'] as CalView[]).map(v => (
               <button
                 key={v}
                 onClick={() => setView(v)}
@@ -166,13 +242,13 @@ export default function CalendarPage() {
                   view === v ? 'bg-neutral-600 text-white' : 'text-neutral-400 hover:text-white'
                 }`}
               >
-                {v === 'month' ? 'Monat' : 'Woche'}
+                {v === 'month' ? 'Monat' : v === 'week' ? 'Woche' : 'Tag'}
               </button>
             ))}
           </div>
           <div className="flex items-center gap-1">
             <button
-              onClick={view === 'month' ? prevMonth : prevWeek}
+              onClick={view === 'month' ? prevMonth : view === 'week' ? prevWeek : prevDay}
               className="w-8 h-8 flex items-center justify-center rounded-md border border-neutral-700 text-neutral-400 hover:text-white hover:border-neutral-500 transition-colors text-sm"
             >
               ‹
@@ -184,7 +260,7 @@ export default function CalendarPage() {
               Heute
             </button>
             <button
-              onClick={view === 'month' ? nextMonth : nextWeek}
+              onClick={view === 'month' ? nextMonth : view === 'week' ? nextWeek : nextDay}
               className="w-8 h-8 flex items-center justify-center rounded-md border border-neutral-700 text-neutral-400 hover:text-white hover:border-neutral-500 transition-colors text-sm"
             >
               ›
@@ -200,11 +276,13 @@ export default function CalendarPage() {
       </div>
 
       <div className="flex-1 overflow-auto p-4">
-        <div className="grid grid-cols-7 mb-1">
-          {WEEKDAY_LABELS.map(d => (
-            <div key={d} className="text-center text-xs text-neutral-500 font-medium py-1">{d}</div>
-          ))}
-        </div>
+        {view !== 'day' && (
+          <div className="grid grid-cols-7 mb-1">
+            {WEEKDAY_LABELS.map(d => (
+              <div key={d} className="text-center text-xs text-neutral-500 font-medium py-1">{d}</div>
+            ))}
+          </div>
+        )}
 
         {view === 'month' && (
           <div className="grid grid-cols-7 gap-px bg-neutral-800 rounded-xl overflow-hidden border border-neutral-800">
@@ -232,6 +310,19 @@ export default function CalendarPage() {
               />
             ))}
           </div>
+        )}
+
+        {view === 'day' && (
+          <DayView
+            anchor={dayAnchor}
+            allDayPosts={postsOnDay(dayAnchor)}
+            brandColor={brandColor}
+            onHourClick={h => {
+              const pad = (n: number) => String(n).padStart(2, '0');
+              const dateStr = dayAnchor.toISOString().slice(0, 10);
+              router.push(`/posts/new?date=${dateStr}&time=${pad(h)}:00`);
+            }}
+          />
         )}
       </div>
 
