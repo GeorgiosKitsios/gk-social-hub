@@ -47,83 +47,12 @@ export const useMediaStore = create<MediaStore>()((set, get) => ({
     }
   },
 
-  addMedia: async (brandId, file, tags) => {
-    console.log('[MediaStore] addMedia gestartet:', { brandId, fileName: file?.name, fileSize: file?.size, tags });
-
-    if (!file || !brandId) {
-      console.error('[MediaStore] addMedia: file oder brandId fehlt', { file, brandId });
-      throw new Error('file und brandId sind erforderlich.');
-    }
-
-    // Datei als Base64 lesen – umgeht alle FormData-Parsing-Probleme
-    const dataUrl = await new Promise<string>((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload  = () => resolve(reader.result as string);
-      reader.onerror = () => reject(new Error('Datei konnte nicht gelesen werden.'));
-      reader.readAsDataURL(file);
-    });
-
-    // Robuste Base64-Extraktion:
-    // 1. indexOf statt split – kein undefined-Risiko
-    // 2. trim() – Whitespace entfernen
-    // 3. Nur gültige Base64-Zeichen behalten (A-Z a-z 0-9 + / =)
-    const commaIdx  = dataUrl.indexOf(',');
-    const rawBase64 = commaIdx >= 0 ? dataUrl.substring(commaIdx + 1) : dataUrl;
-    const fileBase64 = rawBase64.trim().replace(/[^A-Za-z0-9+/=]/g, '');
-
-    if (!fileBase64) {
-      throw new Error('Base64-Kodierung fehlgeschlagen – leerer String nach Extraktion.');
-    }
-
-    console.log('[MediaStore] addMedia: Base64 erzeugt, Länge:', fileBase64.length);
-
-    // encodeURIComponent stellt sicher dass kein Sonderzeichen den JSON-Body beschädigt
-    const fileBase64Encoded = encodeURIComponent(fileBase64);
-
-    let res: Response;
-    try {
-      res = await fetch('/api/media/upload', {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          brandId,
-          fileName:   file.name,
-          fileType:   file.type,
-          fileSize:   file.size,
-          fileBase64: fileBase64Encoded,
-          tags:       tags ?? [],
-        }),
-      });
-    } catch (networkErr) {
-      console.error('[MediaStore] addMedia: Netzwerkfehler beim Upload:', networkErr);
-      throw networkErr;
-    }
-
-    let data: Record<string, unknown>;
-    try {
-      data = await res.json();
-    } catch {
-      console.error('[MediaStore] addMedia: Antwort kein JSON. HTTP-Status:', res.status);
-      throw new Error(`Ungültige Server-Antwort (HTTP ${res.status})`);
-    }
-
-    if (!res.ok || data.error) {
-      console.error('[MediaStore] addMedia: Server-Fehler:', { httpStatus: res.status, error: data.error, response: data });
-      throw new Error(String(data.error ?? `HTTP ${res.status}`));
-    }
-
-    if (!data.id) {
-      console.error('[MediaStore] addMedia: Keine id in Antwort:', data);
-      throw new Error('Ungültige Antwort: Kein id-Feld');
-    }
-
-    console.log('[MediaStore] addMedia erfolgreich:', data.id);
-    set(s => ({
-      media: Array.isArray(s.media)
-        ? [data as unknown as Media, ...s.media]
-        : [data as unknown as Media],
-    }));
-    return data.id as string;
+  addMedia: async (brandId, _file, _tags) => {
+    // Upload erfolgt direkt in MediaUploader per FormData.
+    // addMedia lädt nur die aktualisierte Media-Liste neu.
+    await get().fetchByBrand(brandId);
+    const media = get().media;
+    return (Array.isArray(media) && media.length > 0) ? media[0].id : '';
   },
 
   deleteMedia: async (id, storagePath) => {

@@ -3,7 +3,7 @@ import { useRef, useState, DragEvent } from 'react';
 import { useMediaStore } from '@/store/useMediaStore';
 
 export default function MediaUploader({ brandId, onUploaded }: { brandId: string; onUploaded?: (id: string) => void }) {
-  const { addMedia } = useMediaStore();
+  const { fetchByBrand } = useMediaStore();
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -16,10 +16,26 @@ export default function MediaUploader({ brandId, onUploaded }: { brandId: string
     if (file.size > 50 * 1024 * 1024) { setError('Datei zu groß (max. 50 MB).'); return; }
     setUploading(true);
     try {
-      const id = await addMedia(brandId, file, []);
-      onUploaded?.(id);
-    } catch {
-      setError('Upload fehlgeschlagen. Bitte erneut versuchen.');
+      // Direkt als FormData senden – kein Base64, kein JSON-Encoding
+      const form = new FormData();
+      form.append('file',    file);
+      form.append('brandId', brandId);
+      form.append('tags',    '[]');
+
+      const res = await fetch('/api/media/upload', { method: 'POST', body: form });
+
+      let data: Record<string, unknown> = {};
+      try { data = await res.json(); } catch { /* ignore parse error */ }
+
+      if (!res.ok) {
+        throw new Error(String(data.error ?? `Upload fehlgeschlagen (HTTP ${res.status})`));
+      }
+
+      // Media-Liste aus der Datenbank neu laden
+      await fetchByBrand(brandId);
+      onUploaded?.(String(data.id ?? ''));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Upload fehlgeschlagen. Bitte erneut versuchen.');
     } finally {
       setUploading(false);
     }

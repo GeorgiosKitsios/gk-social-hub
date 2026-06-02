@@ -4,69 +4,60 @@ import { supabaseAdmin } from '@/lib/supabase';
 export async function POST(req: NextRequest) {
   console.log('[upload] ── POST /api/media/upload gestartet ──');
 
-  // ── Schritt 1: JSON-Body lesen ───────────────────────────────
-  let brandId: string, fileName: string, fileType: string,
-      fileSize: number, fileBase64: string, tags: string[];
+  // ── Schritt 1: FormData lesen ────────────────────────────────
+  let file: File, brandId: string, tags: string[];
   try {
-    const body = await req.json();
-    brandId    = body.brandId    ?? '';
-    fileName   = body.fileName   ?? '';
-    fileType   = body.fileType   ?? 'application/octet-stream';
-    fileSize   = body.fileSize   ?? 0;
-    fileBase64 = body.fileBase64 ?? '';
-    tags       = Array.isArray(body.tags) ? body.tags : [];
-    console.log('[upload] Schritt 1 – JSON Body:', {
-      brandId, fileName, fileType, fileSize,
-      base64Length: fileBase64.length,
-      tags,
+    const formData = await req.formData();
+    file    = formData.get('file')    as File;
+    brandId = formData.get('brandId') as string ?? '';
+
+    const tagsRaw = formData.get('tags') as string | null;
+    try {
+      const parsed = tagsRaw && tagsRaw !== 'undefined' ? JSON.parse(tagsRaw) : [];
+      tags = Array.isArray(parsed) ? parsed : [];
+    } catch { tags = []; }
+
+    console.log('[upload] Schritt 1 – FormData:', {
+      fileName: file?.name, fileType: file?.type,
+      fileSize: file?.size, brandId, tags,
     });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    console.error('[upload] Schritt 1 FEHLER – JSON konnte nicht gelesen werden:', msg);
-    return NextResponse.json({ step: 'json_parse', error: msg }, { status: 400 });
+    console.error('[upload] Schritt 1 FEHLER – FormData:', msg);
+    return NextResponse.json({ step: 'formdata', error: msg }, { status: 400 });
   }
 
-  if (!fileBase64 || !brandId || !fileName) {
-    console.error('[upload] Schritt 1 FEHLER – Pflichtfelder fehlen:', { fileBase64: !!fileBase64, brandId, fileName });
-    return NextResponse.json({ step: 'validation', error: 'fileBase64, brandId und fileName sind erforderlich.' }, { status: 400 });
+  if (!file || !brandId) {
+    console.error('[upload] Schritt 1 FEHLER – file oder brandId fehlt');
+    return NextResponse.json({ step: 'validation', error: 'file und brandId sind erforderlich.' }, { status: 400 });
   }
 
   // ── Schritt 2: Env-Variablen prüfen ─────────────────────────
   const supabaseUrl    = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   console.log('[upload] Schritt 2 – Env-Variablen:', {
-    SUPABASE_URL_set:         !!supabaseUrl,
-    SERVICE_ROLE_KEY_set:     !!serviceRoleKey,
-    SUPABASE_URL_prefix:      supabaseUrl?.slice(0, 30) ?? '(fehlt)',
+    SUPABASE_URL_set:     !!supabaseUrl,
+    SERVICE_ROLE_KEY_set: !!serviceRoleKey,
+    SUPABASE_URL_prefix:  supabaseUrl?.slice(0, 30) ?? '(fehlt)',
   });
   if (!supabaseUrl) {
     console.error('[upload] Schritt 2 FEHLER – NEXT_PUBLIC_SUPABASE_URL fehlt!');
     return NextResponse.json({
-      step: 'env',
-      error: 'NEXT_PUBLIC_SUPABASE_URL fehlt. In Hostinger Env-Variablen setzen.',
+      step: 'env', error: 'NEXT_PUBLIC_SUPABASE_URL fehlt. In Hostinger Env-Variablen setzen.',
     }, { status: 500 });
   }
   if (!serviceRoleKey) {
-    console.warn('[upload] Schritt 2 WARNUNG – SUPABASE_SERVICE_ROLE_KEY fehlt, Anon-Key wird als Fallback genutzt (RLS könnte Upload blockieren).');
+    console.warn('[upload] Schritt 2 WARNUNG – SUPABASE_SERVICE_ROLE_KEY fehlt (RLS könnte blockieren).');
   }
 
-  // ── Schritt 3: Base64 dekodieren → Buffer → Supabase Storage ─
-  const ext         = fileName.split('.').pop()?.toLowerCase() ?? 'bin';
+  // ── Schritt 3: Datei direkt in Supabase Storage hochladen ────
+  const ext         = file.name.split('.').pop()?.toLowerCase() ?? 'bin';
   const storagePath = `${brandId}/${crypto.randomUUID()}.${ext}`;
-  let fileBuffer: Buffer;
-  try {
-    // decodeURIComponent kehrt das encodeURIComponent im Store um
-    const decodedBase64 = decodeURIComponent(fileBase64);
-    fileBuffer = Buffer.from(decodedBase64, 'base64');
-    console.log('[upload] Schritt 3 – Buffer erzeugt:', { bytes: fileBuffer.length, path: storagePath });
-  } catch (err) {
-    console.error('[upload] Schritt 3 FEHLER – Base64 Dekodierung:', err);
-    return NextResponse.json({ step: 'base64_decode', error: 'Base64 konnte nicht dekodiert werden.' }, { status: 400 });
-  }
+  console.log('[upload] Schritt 3 – Storage Upload:', { path: storagePath, type: file.type, size: file.size });
 
   const { error: uploadError } = await supabaseAdmin.storage
     .from('media')
-    .upload(storagePath, fileBuffer, { contentType: fileType });
+    .upload(storagePath, file, { contentType: file.type });
 
   if (uploadError) {
     console.error('[upload] Schritt 3 FEHLER – Storage Upload:', {
@@ -89,12 +80,12 @@ export async function POST(req: NextRequest) {
   // ── Schritt 5: Datenbank-Insert ──────────────────────────────
   const insertPayload = {
     brand_id:     brandId,
-    file_name:    fileName,
+    file_name:    file.name,
     file_url:     publicUrl,
     storage_path: storagePath,
-    media_type:   fileType.startsWith('video') ? 'video' : 'image',
-    mime_type:    fileType,
-    size_bytes:   fileSize,
+    media_type:   file.type.startsWith('video') ? 'video' : 'image',
+    mime_type:    file.type,
+    size_bytes:   file.size,
     tags,
   };
   console.log('[upload] Schritt 5 – DB Insert:', insertPayload);
@@ -128,7 +119,7 @@ export async function POST(req: NextRequest) {
     filename:     data.file_name,
     url:          data.file_url,
     thumbnailUrl: data.file_url,
-    sizeBytes:    data.size_bytes ?? fileSize,
+    sizeBytes:    data.size_bytes ?? file.size,
     tags:         Array.isArray(data.tags) ? data.tags : [],
     uploadedAt:   data.created_at ?? new Date().toISOString(),
   };
