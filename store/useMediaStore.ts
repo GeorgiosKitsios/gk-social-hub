@@ -48,14 +48,53 @@ export const useMediaStore = create<MediaStore>()((set, get) => ({
   },
 
   addMedia: async (brandId, file, tags) => {
+    console.log('[MediaStore] addMedia gestartet:', { brandId, fileName: file?.name, fileSize: file?.size, tags });
+
+    if (!file || !brandId) {
+      console.error('[MediaStore] addMedia: file oder brandId fehlt', { file, brandId });
+      throw new Error('file und brandId sind erforderlich.');
+    }
+
     const form = new FormData();
-    form.append('file', file);
+    form.append('file',    file);
     form.append('brandId', brandId);
-    form.append('tags', JSON.stringify(tags));
-    const res = await fetch('/api/media/upload', { method: 'POST', body: form });
-    const data = await res.json();
-    set(s => ({ media: [data, ...s.media] }));
-    return data.id;
+    form.append('tags',    JSON.stringify(tags ?? []));
+
+    let res: Response;
+    try {
+      res = await fetch('/api/media/upload', { method: 'POST', body: form });
+    } catch (networkErr) {
+      console.error('[MediaStore] addMedia: Netzwerkfehler beim Upload:', networkErr);
+      throw networkErr;
+    }
+
+    let data: Record<string, unknown>;
+    try {
+      data = await res.json();
+    } catch (parseErr) {
+      console.error('[MediaStore] addMedia: Antwort konnte nicht als JSON geparst werden. HTTP-Status:', res.status);
+      throw new Error(`Ungültige Server-Antwort (HTTP ${res.status})`);
+    }
+
+    if (!res.ok || data.error) {
+      console.error('[MediaStore] addMedia: Server hat Fehler zurückgegeben:', {
+        httpStatus: res.status,
+        error:      data.error,
+        response:   data,
+      });
+      throw new Error(String(data.error ?? `HTTP ${res.status}`));
+    }
+
+    if (!data.id) {
+      console.error('[MediaStore] addMedia: Antwort enthält keine id:', data);
+      throw new Error('Ungültige Antwort: Kein id-Feld');
+    }
+
+    console.log('[MediaStore] addMedia erfolgreich:', data.id);
+    set(s => ({
+      media: Array.isArray(s.media) ? [data as unknown as import('@/lib/types').Media, ...s.media] : [data as unknown as import('@/lib/types').Media],
+    }));
+    return data.id as string;
   },
 
   deleteMedia: async (id, storagePath) => {
