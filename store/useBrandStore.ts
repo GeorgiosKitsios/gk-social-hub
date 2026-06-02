@@ -40,6 +40,26 @@ export const useBrandStore = create<BrandStore>()(
       archiveBrand: (id) =>
         set(s => ({ brands: s.brands.map(b => b.id === id ? { ...b, archived: true } : b) })),
     }),
-    { name: 'gk-brand-store' }
+    {
+      name: 'gk-brand-store',
+      storage: {
+        getItem: (name) => {
+          try {
+            const val = localStorage.getItem(name);
+            return val ? JSON.parse(val) : null;
+          } catch { return null; }
+        },
+        setItem: (name, value) => {
+          try {
+            localStorage.setItem(name, JSON.stringify(value));
+          } catch (e) {
+            console.error('[BrandStore] localStorage.setItem failed:', e);
+          }
+        },
+        removeItem: (name) => {
+          try { localStorage.removeItem(name); } catch { /* ignore */ }
+        },
+      },
+    }
   )
 );
