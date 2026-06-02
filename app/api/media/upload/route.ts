@@ -10,12 +10,25 @@ export async function POST(req: NextRequest) {
     const formData = await req.formData();
     file    = formData.get('file')    as File;
     brandId = formData.get('brandId') as string;
-    tags    = JSON.parse((formData.get('tags') as string) ?? '[]');
+
+    // Tags sicher parsen: 'undefined', null oder leer → leeres Array
+    const tagsRaw = formData.get('tags');
+    const tagsStr = typeof tagsRaw === 'string' && tagsRaw !== 'undefined' && tagsRaw.trim() !== ''
+      ? tagsRaw
+      : '[]';
+    try {
+      tags = JSON.parse(tagsStr);
+      if (!Array.isArray(tags)) tags = [];
+    } catch {
+      tags = [];
+    }
+
     console.log('[upload] Schritt 1 – FormData:', {
       fileName:  file?.name,
       fileType:  file?.type,
       fileSize:  file?.size,
       brandId,
+      tagsRaw,
       tags,
     });
   } catch (err) {
