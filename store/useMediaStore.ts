@@ -62,8 +62,18 @@ export const useMediaStore = create<MediaStore>()((set, get) => ({
       reader.onerror = () => reject(new Error('Datei konnte nicht gelesen werden.'));
       reader.readAsDataURL(file);
     });
-    // "data:image/jpeg;base64,/9j/..." → nur den Base64-Teil extrahieren
-    const fileBase64 = dataUrl.includes(',') ? dataUrl.split(',')[1] : dataUrl;
+
+    // Robuste Base64-Extraktion:
+    // 1. indexOf statt split – kein undefined-Risiko
+    // 2. trim() – Whitespace entfernen
+    // 3. Nur gültige Base64-Zeichen behalten (A-Z a-z 0-9 + / =)
+    const commaIdx  = dataUrl.indexOf(',');
+    const rawBase64 = commaIdx >= 0 ? dataUrl.substring(commaIdx + 1) : dataUrl;
+    const fileBase64 = rawBase64.trim().replace(/[^A-Za-z0-9+/=]/g, '');
+
+    if (!fileBase64) {
+      throw new Error('Base64-Kodierung fehlgeschlagen – leerer String nach Extraktion.');
+    }
 
     console.log('[MediaStore] addMedia: Base64 erzeugt, Länge:', fileBase64.length);
 
