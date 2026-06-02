@@ -10,8 +10,8 @@ type TypeFilter = 'all' | 'image' | 'video';
 export default function MediaPage() {
   const { getByBrand, getTagsForBrand, fetchByBrand, loading } = useMediaStore();
   const { activeBrandId, activeBrand }  = useBrandStore();
-  const brandId  = activeBrandId ?? '';
   const brand    = activeBrand();
+  const brandId  = brand?.id ?? activeBrandId ?? '';
 
   useEffect(() => {
     if (brandId) fetchByBrand(brandId);
