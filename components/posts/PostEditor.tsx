@@ -47,6 +47,116 @@ function emptyForm(brandId: string): Omit<Post, 'id' | 'createdAt' | 'updatedAt'
   };
 }
 
+function PlatformPreview({
+  platform, text, brandName, brandColor, mediaUrl,
+}: {
+  platform: Platform;
+  text: string;
+  brandName: string;
+  brandColor: string;
+  mediaUrl?: string;
+}) {
+  const isEmpty    = !text.trim();
+  const display    = isEmpty ? 'Post-Text erscheint hier …' : text;
+  const hashtags   = text.match(/#[\wÄäÖöÜüß]+/g) ?? [];
+  const cleanText  = text.replace(/#[\wÄäÖöÜüß]+/g, '').trim();
+  const initial    = brandName.charAt(0).toUpperCase();
+
+  if (platform === 'facebook') {
+    return (
+      <div className="bg-white rounded-xl overflow-hidden shadow-lg text-black w-full max-w-xs mx-auto">
+        <div className="h-1" style={{ backgroundColor: '#1877F2' }} />
+        <div className="p-3">
+          <div className="flex items-center gap-2 mb-3">
+            <div className="w-9 h-9 rounded-full flex items-center justify-center text-white text-sm font-bold shrink-0"
+              style={{ backgroundColor: brandColor }}>{initial}</div>
+            <div className="flex-1 min-w-0">
+              <div className="text-sm font-semibold text-gray-900 leading-tight truncate">{brandName}</div>
+              <div className="text-xs text-gray-400">Jetzt · 🌐</div>
+            </div>
+            <span className="text-gray-400 text-lg leading-none">···</span>
+          </div>
+          <p className={`text-sm leading-relaxed whitespace-pre-wrap mb-3 ${isEmpty ? 'text-gray-300 italic' : 'text-gray-800'}`}>
+            {display}
+          </p>
+          {mediaUrl && <img src={mediaUrl} alt="" className="w-full rounded-lg object-cover max-h-48" />}
+          <div className="flex items-center justify-between mt-3 pt-2 border-t border-gray-100 text-xs text-gray-400">
+            <span>👍 Gefällt mir</span>
+            <span>💬 Kommentieren</span>
+            <span>↗ Teilen</span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (platform === 'instagram') {
+    return (
+      <div className="bg-white rounded-xl overflow-hidden shadow-lg text-black w-full max-w-xs mx-auto">
+        <div className="flex items-center justify-between px-3 py-2 border-b border-gray-100">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-full p-0.5 shrink-0"
+              style={{ background: 'linear-gradient(45deg,#f09433,#e6683c,#dc2743,#cc2366,#bc1888)' }}>
+              <div className="w-full h-full rounded-full flex items-center justify-center text-white text-xs font-bold"
+                style={{ backgroundColor: brandColor }}>{initial}</div>
+            </div>
+            <span className="text-sm font-semibold text-gray-900 truncate">{brandName}</span>
+          </div>
+          <span className="text-gray-400 text-lg leading-none shrink-0">···</span>
+        </div>
+        {mediaUrl
+          ? <img src={mediaUrl} alt="" className="w-full aspect-square object-cover" />
+          : <div className="w-full aspect-square bg-gray-100 flex items-center justify-center text-gray-300 text-5xl">⊡</div>
+        }
+        <div className="px-3 pt-2 pb-1 flex gap-3 text-xl">
+          <span>🤍</span><span>💬</span><span>↗</span>
+          <span className="ml-auto">🔖</span>
+        </div>
+        <div className="px-3 pb-3">
+          <p className={`text-sm leading-relaxed ${isEmpty ? 'text-gray-300 italic' : 'text-gray-800'}`}>
+            {isEmpty
+              ? display
+              : <><span className="font-semibold">{brandName} </span>{hashtags.length > 0 ? cleanText : text}</>
+            }
+          </p>
+          {hashtags.length > 0 && (
+            <p className="text-sm mt-1 flex flex-wrap gap-x-1">
+              {hashtags.map((h, i) => <span key={i} className="text-purple-500">{h}</span>)}
+            </p>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  /* TikTok */
+  return (
+    <div className="bg-black rounded-xl overflow-hidden shadow-lg mx-auto w-40" style={{ aspectRatio: '9/16' }}>
+      <div className="relative w-full h-full">
+        {mediaUrl
+          ? <img src={mediaUrl} alt="" className="absolute inset-0 w-full h-full object-cover opacity-60" />
+          : <div className="absolute inset-0 bg-gradient-to-b from-neutral-800 to-black" />
+        }
+        <div className="absolute right-2 bottom-16 flex flex-col items-center gap-3">
+          <div className="w-8 h-8 rounded-full border-2 border-white flex items-center justify-center text-white text-xs font-bold shrink-0"
+            style={{ backgroundColor: brandColor }}>{initial}</div>
+          <span className="text-lg">❤️</span>
+          <span className="text-lg">💬</span>
+          <span className="text-lg">↗</span>
+        </div>
+        <div className="absolute bottom-0 left-0 right-12 p-3">
+          <p className="text-white text-xs font-semibold mb-1 truncate">
+            @{brandName.toLowerCase().replace(/\s+/g, '_')}
+          </p>
+          <p className={`text-xs leading-relaxed line-clamp-4 ${isEmpty ? 'text-white/30 italic' : 'text-white'}`}>
+            {display}
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 interface Props { postId?: string; presetDate?: string; }
 
 export default function PostEditor({ postId, presetDate }: Props) {
@@ -70,6 +180,10 @@ export default function PostEditor({ postId, presetDate }: Props) {
   const [mediaPickerOpen, setMediaPickerOpen] = useState(false);
   const [platformMode, setPlatformMode]   = useState(false);
   const [tagInput, setTagInput]           = useState('');
+  const [previewPlatform, setPreviewPlatform] = useState<Platform>('facebook');
+  const activePrev: Platform = form.platforms.includes(previewPlatform)
+    ? previewPlatform
+    : (form.platforms[0] ?? 'facebook');
 
   useEffect(() => {
     if (!isNew && postId) {
@@ -397,6 +511,41 @@ export default function PostEditor({ postId, presetDate }: Props) {
 
             {/* Abstand unten */}
             <div className="h-4" />
+          </div>
+
+          {/* ── Vorschau-Panel ── */}
+          <div className="xl:w-80 shrink-0 xl:border-l border-t xl:border-t-0 border-neutral-800 bg-neutral-900/50 p-4 flex flex-col gap-3">
+            {/* Header */}
+            <div className="flex items-center justify-between shrink-0">
+              <span className="text-xs text-neutral-400 font-medium">Vorschau</span>
+              {form.platforms.length > 1 ? (
+                <div className="flex gap-1 bg-neutral-800 rounded-md p-0.5">
+                  {form.platforms.map(p => (
+                    <button key={p} onClick={() => setPreviewPlatform(p)}
+                      className={`px-2.5 py-1 text-xs rounded transition-colors ${activePrev === p ? 'bg-neutral-600 text-white' : 'text-neutral-500 hover:text-white'}`}>
+                      {p === 'facebook' ? 'FB' : p === 'instagram' ? 'IG' : 'TK'}
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <span className="text-xs text-neutral-500">
+                  {activePrev === 'facebook' ? 'Facebook' : activePrev === 'instagram' ? 'Instagram' : 'TikTok'}
+                </span>
+              )}
+            </div>
+            {/* Preview card */}
+            <div className="flex-1 overflow-y-auto">
+              {form.platforms.length === 0
+                ? <p className="text-xs text-neutral-600 text-center mt-8">Keine Plattform ausgewählt.</p>
+                : <PlatformPreview
+                    platform={activePrev}
+                    text={form.platformTexts[activePrev] ?? form.mainText}
+                    brandName={brand?.name ?? 'Marke'}
+                    brandColor={brand?.color ?? '#378ADD'}
+                    mediaUrl={form.mediaIds.length > 0 ? getMediaById(form.mediaIds[0])?.url : undefined}
+                  />
+              }
+            </div>
           </div>
 
           {/* Rechte Spalte – Metadaten */}
