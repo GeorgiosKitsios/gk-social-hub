@@ -43,7 +43,7 @@ function emptyForm(brandId: string): Omit<Post, 'id' | 'createdAt' | 'updatedAt'
     brandId,
     title: '', mainText: '', platformTexts: {}, mediaIds: [],
     platforms: ['facebook', 'instagram'], platformStatus: {},
-    status: 'draft', templateIds: [], notes: '',
+    status: 'draft', templateIds: [], notes: '', tags: [],
   };
 }
 
@@ -69,6 +69,7 @@ export default function PostEditor({ postId, presetDate }: Props) {
   const [templateOpen, setTemplateOpen]   = useState(false);
   const [mediaPickerOpen, setMediaPickerOpen] = useState(false);
   const [platformMode, setPlatformMode]   = useState(false);
+  const [tagInput, setTagInput]           = useState('');
 
   useEffect(() => {
     if (!isNew && postId) {
@@ -348,6 +349,39 @@ export default function PostEditor({ postId, presetDate }: Props) {
                 onInsert={text => setForm(f => ({ ...f, mainText: f.mainText ? `${f.mainText}\n\n${text}` : text }))}
               />
             )}
+
+            {/* Tags */}
+            <div>
+              <label className="block text-xs text-neutral-400 mb-2">Tags</label>
+              <div className="flex flex-wrap gap-1.5 mb-2">
+                {(form.tags ?? []).map(tag => (
+                  <span key={tag} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-violet-500/20 text-violet-300 border border-violet-500/30">
+                    {tag}
+                    <button
+                      onClick={() => setForm(f => ({ ...f, tags: (f.tags ?? []).filter(t => t !== tag) }))}
+                      className="hover:text-white leading-none"
+                    >×</button>
+                  </span>
+                ))}
+              </div>
+              <input
+                type="text"
+                value={tagInput}
+                onChange={e => setTagInput(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === 'Enter' && tagInput.trim()) {
+                    e.preventDefault();
+                    const t = tagInput.trim();
+                    if (!(form.tags ?? []).includes(t)) {
+                      setForm(f => ({ ...f, tags: [...(f.tags ?? []), t] }));
+                    }
+                    setTagInput('');
+                  }
+                }}
+                placeholder="Tag eingeben + Enter"
+                className="w-full bg-neutral-800 border border-neutral-700 rounded-lg px-3 py-2 text-sm text-white placeholder-neutral-500 focus:outline-none focus:border-violet-500"
+              />
+            </div>
 
             {/* Notizen */}
             <div>

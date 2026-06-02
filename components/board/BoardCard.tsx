@@ -21,6 +21,13 @@ export default function BoardCard({ post, brandColor }: { post: Post; brandColor
           <div className="flex gap-1">{post.platforms.map(p=><span key={p} className="text-xs px-1.5 py-0.5 rounded bg-neutral-700 text-neutral-400">{PLATFORM_LABEL[p]}</span>)}</div>
           {date && <span className="text-xs text-neutral-500 shrink-0">{formatDate(date)}</span>}
         </div>
+        {post.tags && post.tags.length > 0 && (
+          <div className="flex flex-wrap gap-1 mt-2">
+            {post.tags.map(tag => (
+              <span key={tag} className="px-1.5 py-0.5 rounded-full text-xs bg-violet-500/20 text-violet-300 border border-violet-500/30">{tag}</span>
+            ))}
+          </div>
+        )}
         {post.notes && <div className="mt-2 text-xs text-neutral-600 flex items-center gap-1"><span>✎</span><span className="truncate">{post.notes}</span></div>}
       </Link>
     </div>

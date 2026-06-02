@@ -39,6 +39,7 @@ export interface Post {
   hashtagSetId?: string;
   notes: string;
   boardColumn?: string;
+  tags: string[];
   createdAt: string;
   updatedAt: string;
 }

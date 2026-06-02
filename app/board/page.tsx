@@ -69,6 +69,10 @@ export default function BoardPage() {
 
   const [activePost, setActivePost] = useState<Post | null>(null);
   const [activeId,   setActiveId]   = useState<string | null>(null);
+  const [filterTag,  setFilterTag]  = useState<string | null>(null);
+
+  const allTags = Array.from(new Set(brandPosts.flatMap(p => p.tags ?? [])));
+  const visiblePosts = filterTag ? brandPosts.filter(p => (p.tags ?? []).includes(filterTag)) : brandPosts;
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -77,7 +81,7 @@ export default function BoardPage() {
   );
 
   function postsForCol(colId: ColId): Post[] {
-    return brandPosts.filter(p => (colMap[p.id] ?? getDefaultCol(p.status)) === colId);
+    return visiblePosts.filter(p => (colMap[p.id] ?? getDefaultCol(p.status)) === colId);
   }
 
   const onDragStart = useCallback(({ active }: DragStartEvent) => {
@@ -131,6 +135,27 @@ export default function BoardPage() {
           + Neuer Post
         </Link>
       </div>
+
+      {allTags.length > 0 && (
+        <div className="flex items-center gap-2 px-6 py-2 border-b border-neutral-800 flex-wrap shrink-0">
+          <span className="text-xs text-neutral-500">Filter:</span>
+          <button
+            onClick={() => setFilterTag(null)}
+            className={`px-2.5 py-0.5 rounded-full text-xs border transition-colors ${filterTag === null ? 'bg-violet-500/20 text-violet-300 border-violet-500/30' : 'border-neutral-700 text-neutral-400 hover:border-neutral-500'}`}
+          >
+            Alle
+          </button>
+          {allTags.map(tag => (
+            <button
+              key={tag}
+              onClick={() => setFilterTag(t => t === tag ? null : tag)}
+              className={`px-2.5 py-0.5 rounded-full text-xs border transition-colors ${filterTag === tag ? 'bg-violet-500/20 text-violet-300 border-violet-500/30' : 'border-neutral-700 text-neutral-400 hover:border-neutral-500'}`}
+            >
+              {tag}
+            </button>
+          ))}
+        </div>
+      )}
 
       <div className="flex-1 overflow-x-auto overflow-y-hidden">
         <DndContext
