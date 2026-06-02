@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useMediaStore } from '@/store/useMediaStore';
 import { useBrandStore } from '@/store/useBrandStore';
 import MediaUploader from '@/components/media/MediaUploader';
@@ -8,12 +8,17 @@ import MediaCard     from '@/components/media/MediaCard';
 type TypeFilter = 'all' | 'image' | 'video';
 
 export default function MediaPage() {
-  const { getByBrand, getTagsForBrand } = useMediaStore();
+  const { getByBrand, getTagsForBrand, fetchByBrand, loading } = useMediaStore();
   const { activeBrandId, activeBrand }  = useBrandStore();
   const brandId  = activeBrandId ?? '';
   const brand    = activeBrand();
-  const allMedia = getByBrand?.(brandId) ?? [];
-  const allTags  = getTagsForBrand?.(brandId) ?? [];
+
+  useEffect(() => {
+    if (brandId) fetchByBrand(brandId);
+  }, [brandId]);
+
+  const allMedia = getByBrand(brandId);
+  const allTags  = getTagsForBrand(brandId);
   const [typeFilter, setTypeFilter]   = useState<TypeFilter>('all');
   const [activeTags, setActiveTags]   = useState<string[]>([]);
   const [showUpload, setShowUpload]   = useState(false);
@@ -49,9 +54,11 @@ export default function MediaPage() {
           </div>
         )}
       </div>
-      {sorted.length > 0
-        ? <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">{sorted.map(m => <MediaCard key={m.id} media={m} onDeleted={() => forceUpdate(n=>n+1)} />)}</div>
-        : <div className="text-center py-20 text-neutral-600"><div className="text-4xl mb-3">⊡</div>{allMedia.length===0 ? <><p className="text-sm">Noch keine Medien.</p><button onClick={() => setShowUpload(true)} className="mt-3 text-sm text-blue-400 hover:text-blue-300">Hochladen →</button></> : <p className="text-sm">Keine Medien mit diesen Filtern.</p>}</div>
+      {loading && allMedia.length === 0
+        ? <div className="text-center py-20 text-neutral-600"><div className="animate-spin text-3xl mb-3">↻</div><p className="text-sm">Medien werden geladen…</p></div>
+        : sorted.length > 0
+          ? <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">{sorted.map(m => <MediaCard key={m.id} media={m} onDeleted={() => forceUpdate(n=>n+1)} />)}</div>
+          : <div className="text-center py-20 text-neutral-600"><div className="text-4xl mb-3">⊡</div>{allMedia.length===0 ? <><p className="text-sm">Noch keine Medien.</p><button onClick={() => setShowUpload(true)} className="mt-3 text-sm text-blue-400 hover:text-blue-300">Hochladen →</button></> : <p className="text-sm">Keine Medien mit diesen Filtern.</p>}</div>
       }
     </div>
   );

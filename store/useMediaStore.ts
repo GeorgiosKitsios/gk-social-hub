@@ -2,16 +2,32 @@ import { create } from 'zustand';
 import { Media } from '@/lib/types';
 
 interface MediaStore {
-  media: Media[];
-  loading: boolean;
-  fetchByBrand: (brandId: string) => Promise<void>;
-  addMedia: (brandId: string, file: File, tags: string[]) => Promise<string>;
-  deleteMedia: (id: string, storagePath: string) => Promise<void>;
+  media:           Media[];
+  loading:         boolean;
+  getById:         (id: string)       => Media | undefined;
+  getByBrand:      (brandId: string)  => Media[];
+  getTagsForBrand: (brandId: string)  => string[];
+  fetchByBrand:    (brandId: string)  => Promise<void>;
+  addMedia:        (brandId: string, file: File, tags: string[]) => Promise<string>;
+  deleteMedia:     (id: string, storagePath: string) => Promise<void>;
 }
 
-export const useMediaStore = create<MediaStore>()((set) => ({
+export const useMediaStore = create<MediaStore>()((set, get) => ({
   media: [],
   loading: false,
+
+  getById: (id) =>
+    get().media.find(m => m.id === id),
+
+  getByBrand: (brandId) =>
+    get().media.filter(m => m.brandId === brandId),
+
+  getTagsForBrand: (brandId) =>
+    Array.from(new Set(
+      get().media
+        .filter(m => m.brandId === brandId)
+        .flatMap(m => m.tags ?? [])
+    )),
 
   fetchByBrand: async (brandId) => {
     set({ loading: true });
