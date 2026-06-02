@@ -13,13 +13,16 @@ export default function MediaUploader({ brandId, onUploaded }: { brandId: string
     setError(null);
     const isImage = file.type.startsWith('image/'), isVideo = file.type.startsWith('video/');
     if (!isImage && !isVideo) { setError('Nur Bilder und Videos.'); return; }
-    if (file.size > 50*1024*1024) { setError('Datei zu groß (max. 50 MB).'); return; }
+    if (file.size > 50 * 1024 * 1024) { setError('Datei zu groß (max. 50 MB).'); return; }
     setUploading(true);
     try {
-      const dataUrl = await new Promise<string>((res,rej) => { const r=new FileReader(); r.onload=()=>res(r.result as string); r.onerror=()=>rej(); r.readAsDataURL(file); });
-      const id = addMedia({ brandId, type:isImage?'image':'video', filename:file.name, url:dataUrl, thumbnailUrl:isImage?dataUrl:'', sizeBytes:file.size, tags:[] });
+      const id = await addMedia(brandId, file, []);
       onUploaded?.(id);
-    } finally { setUploading(false); }
+    } catch {
+      setError('Upload fehlgeschlagen. Bitte erneut versuchen.');
+    } finally {
+      setUploading(false);
+    }
   }
 
   function onDrop(e: DragEvent) { e.preventDefault(); setDragging(false); Array.from(e.dataTransfer.files).forEach(processFile); }
