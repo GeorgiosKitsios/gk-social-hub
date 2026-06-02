@@ -55,14 +55,32 @@ export const useMediaStore = create<MediaStore>()((set, get) => ({
       throw new Error('file und brandId sind erforderlich.');
     }
 
-    const form = new FormData();
-    form.append('file',    file);
-    form.append('brandId', brandId);
-    form.append('tags',    JSON.stringify(tags ?? []));
+    // Datei als Base64 lesen – umgeht alle FormData-Parsing-Probleme
+    const dataUrl = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload  = () => resolve(reader.result as string);
+      reader.onerror = () => reject(new Error('Datei konnte nicht gelesen werden.'));
+      reader.readAsDataURL(file);
+    });
+    // "data:image/jpeg;base64,/9j/..." → nur den Base64-Teil extrahieren
+    const fileBase64 = dataUrl.includes(',') ? dataUrl.split(',')[1] : dataUrl;
+
+    console.log('[MediaStore] addMedia: Base64 erzeugt, Länge:', fileBase64.length);
 
     let res: Response;
     try {
-      res = await fetch('/api/media/upload', { method: 'POST', body: form });
+      res = await fetch('/api/media/upload', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          brandId,
+          fileName:   file.name,
+          fileType:   file.type,
+          fileSize:   file.size,
+          fileBase64,
+          tags:       tags ?? [],
+        }),
+      });
     } catch (networkErr) {
       console.error('[MediaStore] addMedia: Netzwerkfehler beim Upload:', networkErr);
       throw networkErr;
@@ -71,28 +89,26 @@ export const useMediaStore = create<MediaStore>()((set, get) => ({
     let data: Record<string, unknown>;
     try {
       data = await res.json();
-    } catch (parseErr) {
-      console.error('[MediaStore] addMedia: Antwort konnte nicht als JSON geparst werden. HTTP-Status:', res.status);
+    } catch {
+      console.error('[MediaStore] addMedia: Antwort kein JSON. HTTP-Status:', res.status);
       throw new Error(`Ungültige Server-Antwort (HTTP ${res.status})`);
     }
 
     if (!res.ok || data.error) {
-      console.error('[MediaStore] addMedia: Server hat Fehler zurückgegeben:', {
-        httpStatus: res.status,
-        error:      data.error,
-        response:   data,
-      });
+      console.error('[MediaStore] addMedia: Server-Fehler:', { httpStatus: res.status, error: data.error, response: data });
       throw new Error(String(data.error ?? `HTTP ${res.status}`));
     }
 
     if (!data.id) {
-      console.error('[MediaStore] addMedia: Antwort enthält keine id:', data);
+      console.error('[MediaStore] addMedia: Keine id in Antwort:', data);
       throw new Error('Ungültige Antwort: Kein id-Feld');
     }
 
     console.log('[MediaStore] addMedia erfolgreich:', data.id);
     set(s => ({
-      media: Array.isArray(s.media) ? [data as unknown as import('@/lib/types').Media, ...s.media] : [data as unknown as import('@/lib/types').Media],
+      media: Array.isArray(s.media)
+        ? [data as unknown as Media, ...s.media]
+        : [data as unknown as Media],
     }));
     return data.id as string;
   },

@@ -4,94 +4,92 @@ import { supabase } from '@/lib/supabase';
 export async function POST(req: NextRequest) {
   console.log('[upload] ── POST /api/media/upload gestartet ──');
 
-  // ── Schritt 1: FormData lesen ────────────────────────────────
-  let file: File, brandId: string, tags: string[];
+  // ── Schritt 1: JSON-Body lesen ───────────────────────────────
+  let brandId: string, fileName: string, fileType: string,
+      fileSize: number, fileBase64: string, tags: string[];
   try {
-    const formData = await req.formData();
-    file    = formData.get('file')    as File;
-    brandId = formData.get('brandId') as string;
-
-    // Tags sicher parsen: 'undefined', null oder leer → leeres Array
-    const tagsRaw = formData.get('tags');
-    const tagsStr = typeof tagsRaw === 'string' && tagsRaw !== 'undefined' && tagsRaw.trim() !== ''
-      ? tagsRaw
-      : '[]';
-    try {
-      tags = JSON.parse(tagsStr);
-      if (!Array.isArray(tags)) tags = [];
-    } catch {
-      tags = [];
-    }
-
-    console.log('[upload] Schritt 1 – FormData:', {
-      fileName:  file?.name,
-      fileType:  file?.type,
-      fileSize:  file?.size,
-      brandId,
-      tagsRaw,
+    const body = await req.json();
+    brandId    = body.brandId    ?? '';
+    fileName   = body.fileName   ?? '';
+    fileType   = body.fileType   ?? 'application/octet-stream';
+    fileSize   = body.fileSize   ?? 0;
+    fileBase64 = body.fileBase64 ?? '';
+    tags       = Array.isArray(body.tags) ? body.tags : [];
+    console.log('[upload] Schritt 1 – JSON Body:', {
+      brandId, fileName, fileType, fileSize,
+      base64Length: fileBase64.length,
       tags,
     });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    console.error('[upload] Schritt 1 FEHLER – FormData konnte nicht gelesen werden:', msg);
-    return NextResponse.json({ step: 'formdata', error: msg }, { status: 400 });
+    console.error('[upload] Schritt 1 FEHLER – JSON konnte nicht gelesen werden:', msg);
+    return NextResponse.json({ step: 'json_parse', error: msg }, { status: 400 });
   }
 
-  if (!file || !brandId) {
-    console.error('[upload] Schritt 1 FEHLER – file oder brandId fehlt:', { file: !!file, brandId });
-    return NextResponse.json({ step: 'validation', error: 'file und brandId sind erforderlich.' }, { status: 400 });
+  if (!fileBase64 || !brandId || !fileName) {
+    console.error('[upload] Schritt 1 FEHLER – Pflichtfelder fehlen:', { fileBase64: !!fileBase64, brandId, fileName });
+    return NextResponse.json({ step: 'validation', error: 'fileBase64, brandId und fileName sind erforderlich.' }, { status: 400 });
   }
 
   // ── Schritt 2: Env-Variablen prüfen ─────────────────────────
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   console.log('[upload] Schritt 2 – Env-Variablen:', {
-    SUPABASE_URL_set:  !!supabaseUrl,
-    SUPABASE_KEY_set:  !!supabaseKey,
+    SUPABASE_URL_set:    !!supabaseUrl,
+    SUPABASE_KEY_set:    !!supabaseKey,
     SUPABASE_URL_prefix: supabaseUrl?.slice(0, 30) ?? '(fehlt)',
   });
   if (!supabaseUrl || !supabaseKey) {
     console.error('[upload] Schritt 2 FEHLER – Supabase Env-Variablen nicht gesetzt!');
-    return NextResponse.json({ step: 'env', error: 'Supabase Umgebungsvariablen fehlen. Bitte NEXT_PUBLIC_SUPABASE_URL und NEXT_PUBLIC_SUPABASE_ANON_KEY in Hostinger setzen.' }, { status: 500 });
+    return NextResponse.json({
+      step: 'env',
+      error: 'Supabase Umgebungsvariablen fehlen. NEXT_PUBLIC_SUPABASE_URL und NEXT_PUBLIC_SUPABASE_ANON_KEY in Hostinger setzen.',
+    }, { status: 500 });
   }
 
-  // ── Schritt 3: Supabase Storage Upload ──────────────────────
-  const ext  = file.name.split('.').pop() ?? 'bin';
-  const path = `${brandId}/${crypto.randomUUID()}.${ext}`;
-  console.log('[upload] Schritt 3 – Storage Upload:', { bucket: 'media', path });
+  // ── Schritt 3: Base64 → Buffer → Supabase Storage ───────────
+  const ext        = fileName.split('.').pop()?.toLowerCase() ?? 'bin';
+  const storagePath = `${brandId}/${crypto.randomUUID()}.${ext}`;
+  let fileBuffer: Buffer;
+  try {
+    fileBuffer = Buffer.from(fileBase64, 'base64');
+    console.log('[upload] Schritt 3 – Buffer erzeugt:', { bytes: fileBuffer.length, path: storagePath });
+  } catch (err) {
+    console.error('[upload] Schritt 3 FEHLER – Base64 Dekodierung:', err);
+    return NextResponse.json({ step: 'base64_decode', error: 'Base64 konnte nicht dekodiert werden.' }, { status: 400 });
+  }
 
   const { error: uploadError } = await supabase.storage
     .from('media')
-    .upload(path, file);
+    .upload(storagePath, fileBuffer, { contentType: fileType });
 
   if (uploadError) {
     console.error('[upload] Schritt 3 FEHLER – Storage Upload:', {
       message:    uploadError.message,
       statusCode: (uploadError as { statusCode?: string }).statusCode,
-      error:      uploadError,
     });
     return NextResponse.json({
-      step:        'storage_upload',
-      error:       uploadError.message,
-      statusCode:  (uploadError as { statusCode?: string }).statusCode,
-      hint:        'Prüfe ob der Bucket "media" in Supabase existiert und Public ist.',
+      step:       'storage_upload',
+      error:      uploadError.message,
+      statusCode: (uploadError as { statusCode?: string }).statusCode,
+      hint:       'Prüfe ob der Bucket "media" in Supabase existiert und öffentlich ist.',
     }, { status: 500 });
   }
-  console.log('[upload] Schritt 3 OK – Datei hochgeladen:', path);
+  console.log('[upload] Schritt 3 OK – Datei hochgeladen:', storagePath);
 
   // ── Schritt 4: Öffentliche URL ───────────────────────────────
-  const { data: { publicUrl } } = supabase.storage.from('media').getPublicUrl(path);
+  const { data: { publicUrl } } = supabase.storage.from('media').getPublicUrl(storagePath);
   console.log('[upload] Schritt 4 – Public URL:', publicUrl);
 
   // ── Schritt 5: Datenbank-Insert ──────────────────────────────
   const insertPayload = {
     brand_id:     brandId,
-    file_name:    file.name,
+    file_name:    fileName,
     file_url:     publicUrl,
-    storage_path: path,
-    media_type:   file.type.startsWith('video') ? 'video' : 'image',
-    mime_type:    file.type,
-    size_bytes:   file.size,
+    storage_path: storagePath,
+    media_type:   fileType.startsWith('video') ? 'video' : 'image',
+    mime_type:    fileType,
+    size_bytes:   fileSize,
     tags,
   };
   console.log('[upload] Schritt 5 – DB Insert:', insertPayload);
@@ -104,31 +102,29 @@ export async function POST(req: NextRequest) {
 
   if (dbError) {
     console.error('[upload] Schritt 5 FEHLER – DB Insert:', {
-      message: dbError.message,
-      code:    dbError.code,
-      details: dbError.details,
-      hint:    dbError.hint,
+      message: dbError.message, code: dbError.code,
+      details: dbError.details, hint: dbError.hint,
     });
     return NextResponse.json({
       step:    'db_insert',
       error:   dbError.message,
       code:    dbError.code,
       details: dbError.details,
-      hint:    dbError.hint ?? 'Prüfe ob die Tabelle "media_items" in Supabase existiert und alle Spalten korrekt sind.',
+      hint:    dbError.hint ?? 'Prüfe ob die Tabelle "media_items" existiert und alle Spalten stimmen.',
     }, { status: 500 });
   }
-  console.log('[upload] Schritt 5 OK – DB-Eintrag erstellt:', data.id);
+  console.log('[upload] Schritt 5 OK – DB-Eintrag:', data.id);
 
-  // ── Schritt 6: Erfolg ────────────────────────────────────────
+  // ── Schritt 6: Erfolg – camelCase zurückgeben ────────────────
   const result = {
     id:           data.id,
     brandId:      data.brand_id,
-    type:         data.media_type as 'image' | 'video',
+    type:         (data.media_type ?? 'image') as 'image' | 'video',
     filename:     data.file_name,
     url:          data.file_url,
     thumbnailUrl: data.file_url,
-    sizeBytes:    data.size_bytes ?? file.size,
-    tags:         data.tags ?? [],
+    sizeBytes:    data.size_bytes ?? fileSize,
+    tags:         Array.isArray(data.tags) ? data.tags : [],
     uploadedAt:   data.created_at ?? new Date().toISOString(),
   };
   console.log('[upload] ── Erfolgreich abgeschlossen ──', result.id);
