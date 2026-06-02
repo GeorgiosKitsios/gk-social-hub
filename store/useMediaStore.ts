@@ -77,6 +77,9 @@ export const useMediaStore = create<MediaStore>()((set, get) => ({
 
     console.log('[MediaStore] addMedia: Base64 erzeugt, Länge:', fileBase64.length);
 
+    // encodeURIComponent stellt sicher dass kein Sonderzeichen den JSON-Body beschädigt
+    const fileBase64Encoded = encodeURIComponent(fileBase64);
+
     let res: Response;
     try {
       res = await fetch('/api/media/upload', {
@@ -87,7 +90,7 @@ export const useMediaStore = create<MediaStore>()((set, get) => ({
           fileName:   file.name,
           fileType:   file.type,
           fileSize:   file.size,
-          fileBase64,
+          fileBase64: fileBase64Encoded,
           tags:       tags ?? [],
         }),
       });

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabase';
+import { supabaseAdmin } from '@/lib/supabase';
 
 export async function POST(req: NextRequest) {
   console.log('[upload] ── POST /api/media/upload gestartet ──');
@@ -32,34 +32,39 @@ export async function POST(req: NextRequest) {
   }
 
   // ── Schritt 2: Env-Variablen prüfen ─────────────────────────
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  const supabaseUrl    = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   console.log('[upload] Schritt 2 – Env-Variablen:', {
-    SUPABASE_URL_set:    !!supabaseUrl,
-    SUPABASE_KEY_set:    !!supabaseKey,
-    SUPABASE_URL_prefix: supabaseUrl?.slice(0, 30) ?? '(fehlt)',
+    SUPABASE_URL_set:         !!supabaseUrl,
+    SERVICE_ROLE_KEY_set:     !!serviceRoleKey,
+    SUPABASE_URL_prefix:      supabaseUrl?.slice(0, 30) ?? '(fehlt)',
   });
-  if (!supabaseUrl || !supabaseKey) {
-    console.error('[upload] Schritt 2 FEHLER – Supabase Env-Variablen nicht gesetzt!');
+  if (!supabaseUrl) {
+    console.error('[upload] Schritt 2 FEHLER – NEXT_PUBLIC_SUPABASE_URL fehlt!');
     return NextResponse.json({
       step: 'env',
-      error: 'Supabase Umgebungsvariablen fehlen. NEXT_PUBLIC_SUPABASE_URL und NEXT_PUBLIC_SUPABASE_ANON_KEY in Hostinger setzen.',
+      error: 'NEXT_PUBLIC_SUPABASE_URL fehlt. In Hostinger Env-Variablen setzen.',
     }, { status: 500 });
   }
+  if (!serviceRoleKey) {
+    console.warn('[upload] Schritt 2 WARNUNG – SUPABASE_SERVICE_ROLE_KEY fehlt, Anon-Key wird als Fallback genutzt (RLS könnte Upload blockieren).');
+  }
 
-  // ── Schritt 3: Base64 → Buffer → Supabase Storage ───────────
-  const ext        = fileName.split('.').pop()?.toLowerCase() ?? 'bin';
+  // ── Schritt 3: Base64 dekodieren → Buffer → Supabase Storage ─
+  const ext         = fileName.split('.').pop()?.toLowerCase() ?? 'bin';
   const storagePath = `${brandId}/${crypto.randomUUID()}.${ext}`;
   let fileBuffer: Buffer;
   try {
-    fileBuffer = Buffer.from(fileBase64, 'base64');
+    // decodeURIComponent kehrt das encodeURIComponent im Store um
+    const decodedBase64 = decodeURIComponent(fileBase64);
+    fileBuffer = Buffer.from(decodedBase64, 'base64');
     console.log('[upload] Schritt 3 – Buffer erzeugt:', { bytes: fileBuffer.length, path: storagePath });
   } catch (err) {
     console.error('[upload] Schritt 3 FEHLER – Base64 Dekodierung:', err);
     return NextResponse.json({ step: 'base64_decode', error: 'Base64 konnte nicht dekodiert werden.' }, { status: 400 });
   }
 
-  const { error: uploadError } = await supabase.storage
+  const { error: uploadError } = await supabaseAdmin.storage
     .from('media')
     .upload(storagePath, fileBuffer, { contentType: fileType });
 
@@ -78,7 +83,7 @@ export async function POST(req: NextRequest) {
   console.log('[upload] Schritt 3 OK – Datei hochgeladen:', storagePath);
 
   // ── Schritt 4: Öffentliche URL ───────────────────────────────
-  const { data: { publicUrl } } = supabase.storage.from('media').getPublicUrl(storagePath);
+  const { data: { publicUrl } } = supabaseAdmin.storage.from('media').getPublicUrl(storagePath);
   console.log('[upload] Schritt 4 – Public URL:', publicUrl);
 
   // ── Schritt 5: Datenbank-Insert ──────────────────────────────
@@ -94,7 +99,7 @@ export async function POST(req: NextRequest) {
   };
   console.log('[upload] Schritt 5 – DB Insert:', insertPayload);
 
-  const { data, error: dbError } = await supabase
+  const { data, error: dbError } = await supabaseAdmin
     .from('media_items')
     .insert(insertPayload)
     .select()
