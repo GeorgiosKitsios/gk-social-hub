@@ -266,6 +266,21 @@ export default function PostEditor({ postId, presetDate }: Props) {
     else setConfirm(true);
   }
 
+  // ── Facebook-Publish-Validierung ──────────────────────────────
+  const fbValidationErrors: string[] = [];
+  if (!form.mainText.trim()) {
+    fbValidationErrors.push('Post-Text ist leer.');
+  }
+  if (form.platforms.includes('instagram') && form.mediaIds.length === 0) {
+    fbValidationErrors.push('Instagram ist ausgewählt – mindestens ein Bild erforderlich.');
+  }
+  if (scheduledDate) {
+    const scheduled = new Date(`${scheduledDate}T${scheduledTime}`);
+    if (scheduled < new Date()) {
+      fbValidationErrors.push('Geplantes Datum liegt in der Vergangenheit.');
+    }
+  }
+
   return (
     // Outer: volle Höhe, kein overflow
     <div className="flex flex-col" style={{ height: '100%' }}>
@@ -305,6 +320,7 @@ export default function PostEditor({ postId, presetDate }: Props) {
           <FacebookPublishButton
             message={form.mainText}
             mediaIds={form.mediaIds}
+            validationErrors={fbValidationErrors}
             onSuccess={() => handleSave('published')}
             onError={(e) => console.error(e)}
           />

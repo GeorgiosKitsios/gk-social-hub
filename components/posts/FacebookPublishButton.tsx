@@ -10,10 +10,11 @@ interface FacebookPage {
 }
 
 interface Props {
-  message:    string;
-  mediaIds?:  string[];
-  onSuccess?: (postId: string, pageName: string) => void;
-  onError?:   (error: string) => void;
+  message:           string;
+  mediaIds?:         string[];
+  validationErrors?: string[];
+  onSuccess?:        (postId: string, pageName: string) => void;
+  onError?:          (error: string) => void;
 }
 
 function loadPages(): FacebookPage[] {
@@ -25,7 +26,7 @@ function loadPages(): FacebookPage[] {
 
 type PostVariant = 'text' | 'image' | 'video_feed' | 'video_reel';
 
-export default function FacebookPublishButton({ message, mediaIds = [], onSuccess, onError }: Props) {
+export default function FacebookPublishButton({ message, mediaIds = [], validationErrors, onSuccess, onError }: Props) {
   const [loading,        setLoading]        = useState(false);
   const [showPicker,     setShowPicker]     = useState(false);
   const [showTypePicker, setShowTypePicker] = useState(false);
@@ -39,13 +40,11 @@ export default function FacebookPublishButton({ message, mediaIds = [], onSucces
   const videoBase64 = firstMedia?.type === 'video' ? firstMedia.url : undefined;
   const isVideo     = !!videoBase64;
 
-  if (pages.length === 0) {
-    return (
-      <a href="/accounts" className="text-xs text-blue-400 hover:text-blue-300 transition-colors">
-        Facebook verbinden →
-      </a>
-    );
-  }
+  const internalErrors: string[] = pages.length === 0
+    ? ['Keine Facebook-Seite verbunden.']
+    : [];
+  const allErrors  = [...internalErrors, ...(validationErrors ?? [])];
+  const canPublish = allErrors.length === 0;
 
   function getDefaultVariant(): PostVariant {
     if (imageBase64) return 'image';
@@ -132,8 +131,10 @@ export default function FacebookPublishButton({ message, mediaIds = [], onSucces
       <div className="flex gap-2 flex-wrap">
         <button
           onClick={() => isVideo ? setShowTypePicker(o => !o) : publishAll(getDefaultVariant())}
-          disabled={loading || !message.trim()}
-          className="flex-1 text-xs py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-medium transition-colors disabled:opacity-40 flex items-center justify-center gap-1.5"
+          disabled={loading || !canPublish}
+          className={`flex-1 text-xs py-2 rounded-lg font-medium transition-colors disabled:opacity-50 flex items-center justify-center gap-1.5 text-white ${
+            canPublish && !loading ? 'bg-green-600 hover:bg-green-500' : 'bg-neutral-700'
+          }`}
         >
           {loading
             ? <><div className="w-3 h-3 border border-white border-t-transparent rounded-full animate-spin" /> Wird gepostet...</>
@@ -152,6 +153,23 @@ export default function FacebookPublishButton({ message, mediaIds = [], onSucces
           </button>
         )}
       </div>
+
+      {/* Validierungsfehler */}
+      {allErrors.length > 0 && (
+        <div className="flex flex-col gap-1">
+          {allErrors.map((err, i) => (
+            <p key={i} className="text-xs text-red-400 flex items-start gap-1">
+              <span className="shrink-0 mt-px">✕</span>
+              <span>{err}</span>
+            </p>
+          ))}
+          {pages.length === 0 && (
+            <a href="/accounts" className="text-xs text-blue-400 hover:text-blue-300 transition-colors mt-0.5">
+              → Jetzt Facebook-Seite verbinden
+            </a>
+          )}
+        </div>
+      )}
 
       {/* Video-Typ-Picker */}
       {isVideo && showTypePicker && (
@@ -173,7 +191,7 @@ export default function FacebookPublishButton({ message, mediaIds = [], onSucces
           {pages.map(page => (
             <button key={page.id}
               onClick={() => { publishToPage(page, getDefaultVariant()); setShowPicker(false); }}
-              disabled={loading || !message.trim()}
+              disabled={loading || !canPublish}
               className="text-xs px-3 py-2 rounded-md border border-neutral-700 text-neutral-300 hover:text-white hover:border-blue-500 transition-colors text-left disabled:opacity-40">
               📘 {page.name}
             </button>
