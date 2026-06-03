@@ -6,7 +6,7 @@ const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 if (!supabaseUrl)    console.error('[Supabase] NEXT_PUBLIC_SUPABASE_URL ist nicht gesetzt.');
 if (!supabaseKey)    console.error('[Supabase] NEXT_PUBLIC_SUPABASE_ANON_KEY ist nicht gesetzt.');
-if (!serviceRoleKey) console.error('[Supabase] SUPABASE_SERVICE_ROLE_KEY ist nicht gesetzt – Server-Uploads und DB-Inserts werden durch RLS blockiert.');
+if (typeof window === 'undefined' && !serviceRoleKey) console.error('[Supabase] SUPABASE_SERVICE_ROLE_KEY ist nicht gesetzt – Server-Uploads und DB-Inserts werden durch RLS blockiert.');
 
 const PLACEHOLDER_URL = 'https://placeholder.supabase.co';
 const PLACEHOLDER_KEY = 'placeholder-key';
