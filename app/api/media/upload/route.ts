@@ -1,88 +1,142 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { hasSupabaseAdminConfig, supabaseAdmin } from '@/lib/supabase';
 
-const MAX_UPLOAD_SIZE_BYTES = 50 * 1024 * 1024;
-const ALLOWED_FILE_TYPES = new Set(['image/jpeg', 'image/png', 'video/mp4', 'video/quicktime']);
-const EXTENSIONS_BY_TYPE: Record<string, string> = {
-  'image/jpeg': 'jpg',
-  'image/png': 'png',
-  'video/mp4': 'mp4',
-  'video/quicktime': 'mov',
-};
-
-type SignedUploadRequest = {
-  brandId?: unknown;
-  fileName?: unknown;
-  fileType?: unknown;
-  fileSize?: unknown;
-};
-
-function getValidationError({ brandId, fileName, fileType, fileSize }: SignedUploadRequest) {
-  if (typeof brandId !== 'string' || !brandId.trim()) {
-    return 'brandId ist erforderlich.';
-  }
-
-  if (typeof fileName !== 'string' || !fileName.trim()) {
-    return 'Dateiname ist erforderlich.';
-  }
-
-  if (typeof fileType !== 'string' || !ALLOWED_FILE_TYPES.has(fileType)) {
-    return 'Dateityp nicht erlaubt. Erlaubt sind JPG, PNG, MP4 und MOV.';
-  }
-
-  if (typeof fileSize !== 'number' || !Number.isFinite(fileSize) || fileSize <= 0) {
-    return 'Dateigröße ist erforderlich.';
-  }
-
-  if (fileSize > MAX_UPLOAD_SIZE_BYTES) {
-    return 'Datei zu groß (max. 50 MB).';
-  }
-
-  return null;
-}
-
 export async function POST(req: NextRequest) {
-  let body: SignedUploadRequest;
+  console.log('[upload] ── POST /api/media/upload gestartet ──');
 
+  // ── Schritt 1: FormData lesen ────────────────────────────────
+  let file: File, brandId: string, tags: string[];
   try {
-    body = await req.json();
-  } catch {
-    return NextResponse.json({ step: 'validation', error: 'Ungültige Upload-Anfrage.' }, { status: 400 });
+    const formData = await req.formData();
+    file    = formData.get('file')    as File;
+    brandId = formData.get('brandId') as string ?? '';
+
+    const tagsRaw = formData.get('tags') as string | null;
+    try {
+      const parsed = tagsRaw && tagsRaw !== 'undefined' ? JSON.parse(tagsRaw) : [];
+      tags = Array.isArray(parsed) ? parsed : [];
+    } catch { tags = []; }
+
+    console.log('[upload] Schritt 1 – FormData:', {
+      fileName: file?.name, fileType: file?.type,
+      fileSize: file?.size, brandId, tags,
+    });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error('[upload] Schritt 1 FEHLER – FormData:', msg);
+    return NextResponse.json({ step: 'formdata', error: msg }, { status: 400 });
   }
 
-  const validationError = getValidationError(body);
-  if (validationError) {
-    return NextResponse.json({ step: 'validation', error: validationError }, { status: 400 });
+  if (!file || !brandId) {
+    console.error('[upload] Schritt 1 FEHLER – file oder brandId fehlt');
+    return NextResponse.json({ step: 'validation', error: 'file und brandId sind erforderlich.' }, { status: 400 });
   }
 
-  if (!hasSupabaseAdminConfig()) {
+  // ── Schritt 2: Env-Variablen prüfen ─────────────────────────
+  const supabaseUrl    = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  console.log('[upload] Schritt 2 – Env-Variablen:', {
+    SUPABASE_URL_set:     !!supabaseUrl,
+    SERVICE_ROLE_KEY_set: !!serviceRoleKey,
+    SUPABASE_URL_prefix:  supabaseUrl?.slice(0, 30) ?? '(fehlt)',
+  });
+  if (!supabaseUrl) {
+    console.error('[upload] Schritt 2 FEHLER – NEXT_PUBLIC_SUPABASE_URL fehlt!');
+    return NextResponse.json({
+      step: 'env', error: 'NEXT_PUBLIC_SUPABASE_URL fehlt. In Hostinger Env-Variablen setzen.',
+    }, { status: 500 });
+  }
+  if (!serviceRoleKey || !hasSupabaseAdminConfig()) {
+    console.error('[upload] Schritt 2 FEHLER – SUPABASE_SERVICE_ROLE_KEY fehlt!');
     return NextResponse.json({
       step: 'env',
-      error: 'SUPABASE_SERVICE_ROLE_KEY fehlt. Signed Upload URLs müssen serverseitig mit dem Service Role Key erstellt werden.',
+      error: 'SUPABASE_SERVICE_ROLE_KEY fehlt. Server-Uploads und DB-Inserts benötigen den Service Role Key, damit RLS nicht blockiert.',
     }, { status: 500 });
   }
 
-  const brandId = (body.brandId as string).trim();
-  const fileType = body.fileType as string;
-  const storagePath = `${brandId}/${crypto.randomUUID()}.${EXTENSIONS_BY_TYPE[fileType]}`;
+  // ── Schritt 3: Datei direkt in Supabase Storage hochladen ────
+  const ext         = file?.name ? file.name.split('.').pop()?.toLowerCase() ?? 'jpg' : 'jpg';
+  const storagePath = `${brandId}/${crypto.randomUUID()}.${ext}`;
+  console.log('[upload] Schritt 3 – Storage Upload:', { path: storagePath, type: file.type, size: file.size });
 
-  const { data, error } = await supabaseAdmin.storage
+  const { error: uploadError } = await supabaseAdmin.storage
     .from('media')
-    .createSignedUploadUrl(storagePath);
+    .upload(storagePath, file, { contentType: file.type });
 
-  if (error || !data?.token) {
-    console.error('[api/media/upload] Signed URL konnte nicht erstellt werden:', error);
+  if (uploadError) {
+    console.error('[upload] Schritt 3 FEHLER – Storage Upload:', {
+      message:    uploadError.message,
+      statusCode: (uploadError as { statusCode?: string }).statusCode,
+    });
     return NextResponse.json({
-      step: 'signed_upload_url',
-      error: `Signed URL konnte nicht erstellt werden${error?.message ? `: ${error.message}` : '.'}`,
-      hint: 'Prüfe, ob der Supabase Storage Bucket "media" existiert.',
+      step:       'storage_upload',
+      error:      uploadError.message,
+      statusCode: (uploadError as { statusCode?: string }).statusCode,
+      hint:       'Prüfe ob der Bucket "media" in Supabase existiert und öffentlich ist.',
     }, { status: 500 });
   }
+  console.log('[upload] Schritt 3 OK – Datei hochgeladen:', storagePath);
 
-  return NextResponse.json({
-    bucket: 'media',
-    storagePath: data.path,
-    signedUrl: data.signedUrl,
-    token: data.token,
-  });
+  // ── Schritt 4: Öffentliche URL ───────────────────────────────
+  const { data: { publicUrl } } = supabaseAdmin.storage.from('media').getPublicUrl(storagePath);
+  console.log('[upload] Schritt 4 – Public URL:', publicUrl);
+
+  // ── Schritt 5: Datenbank-Insert ──────────────────────────────
+  const insertPayload = {
+    brand_id:     brandId,
+    file_name:    file.name,
+    file_url:     publicUrl,
+    storage_path: storagePath,
+    media_type:   file.type.startsWith('video') ? 'video' : 'image',
+    mime_type:    file.type,
+    size_bytes:   file.size,
+    tags,
+  };
+  console.log('[upload] Schritt 5 – DB Insert:', insertPayload);
+
+  const { data, error: dbError } = await supabaseAdmin
+    .from('media_items')
+    .insert(insertPayload)
+    .select()
+    .single();
+
+  if (dbError) {
+    console.error('[upload] Schritt 5 FEHLER – DB Insert:', {
+      message: dbError.message, code: dbError.code,
+      details: dbError.details, hint: dbError.hint,
+    });
+    return NextResponse.json({
+      step:    'db_insert',
+      error:   dbError.message,
+      code:    dbError.code,
+      details: dbError.details,
+      hint:    dbError.hint ?? 'Prüfe ob die Tabelle "media_items" existiert und alle Spalten stimmen.',
+    }, { status: 500 });
+  }
+  console.log('[upload] Schritt 5 OK – DB-Eintrag:', data.id);
+
+  // ── Schritt 6: Erfolg – camelCase zurückgeben ────────────────
+  const mediaType = (data.media_type ?? 'image') as 'image' | 'video';
+  const createdAt = data.created_at ?? new Date().toISOString();
+  const result = {
+    id:           data.id,
+    brandId:      data.brand_id,
+    fileName:     data.file_name,
+    fileUrl:      data.file_url,
+    mediaType,
+    tags:         Array.isArray(data.tags) ? data.tags : [],
+    createdAt,
+    updatedAt:    data.updated_at ?? createdAt,
+    uploadedAt:   createdAt,
+
+    // Bestehende Frontend-/Store-Felder beibehalten.
+    type:         mediaType,
+    filename:     data.file_name,
+    url:          data.file_url,
+    thumbnailUrl: data.file_url,
+    sizeBytes:    data.size_bytes ?? file.size,
+    storagePath:  data.storage_path ?? storagePath,
+  };
+  console.log('[upload] ── Erfolgreich abgeschlossen ──', result.id);
+  return NextResponse.json(result);
 }
