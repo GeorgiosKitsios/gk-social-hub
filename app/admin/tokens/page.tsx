@@ -36,6 +36,17 @@ const KNOWN_IG_BRANDS = [
   { id: 'georgios-kitsios',  name: 'Georgios Kitsios',   defaultAccountId: ''                  },
 ];
 
+const createDefaultIgForm = () =>
+  KNOWN_IG_BRANDS.reduce<Record<string, { accountId: string; accessToken: string }>>((form, brand) => {
+    form[brand.id] = { accountId: brand.defaultAccountId, accessToken: '' };
+    return form;
+  }, {});
+
+const getDefaultIgEntry = (brandId: string) => {
+  const brand = KNOWN_IG_BRANDS.find(b => b.id === brandId);
+  return { accountId: brand?.defaultAccountId ?? '', accessToken: '' };
+};
+
 // ── Komponente ───────────────────────────────────────────────────────────────
 
 export default function AdminTokensPage() {
@@ -47,7 +58,7 @@ export default function AdminTokensPage() {
 
   // ── Instagram State ─────────────────────────────────────────────────────
   // igForm: keyed by brand.id → { accountId, accessToken }
-  const [igForm,    setIgForm]    = useState<Record<string, { accountId: string; accessToken: string }>>({});
+  const [igForm,    setIgForm]    = useState<Record<string, { accountId: string; accessToken: string }>>(createDefaultIgForm);
   const [igSaved,   setIgSaved]   = useState(false);
   const [igCurrent, setIgCurrent] = useState<InstagramAccount[]>([]);
 
@@ -71,7 +82,7 @@ export default function AdminTokensPage() {
       if (raw) {
         const accounts: InstagramAccount[] = JSON.parse(raw);
         setIgCurrent(accounts);
-        const form: Record<string, { accountId: string; accessToken: string }> = {};
+        const form = createDefaultIgForm();
         accounts.forEach(a => {
           form[a.id] = { accountId: a.accountId, accessToken: a.accessToken };
         });
@@ -115,14 +126,14 @@ export default function AdminTokensPage() {
 
   function handleIgClear() {
     localStorage.removeItem(IG_STORAGE_KEY);
-    setIgForm({});
+    setIgForm(createDefaultIgForm());
     setIgCurrent([]);
   }
 
   function setIgField(brandId: string, field: 'accountId' | 'accessToken', value: string) {
     setIgForm(prev => ({
       ...prev,
-      [brandId]: { ...prev[brandId], [field]: value },
+      [brandId]: { ...getDefaultIgEntry(brandId), ...prev[brandId], [field]: value },
     }));
   }
 
@@ -152,7 +163,7 @@ export default function AdminTokensPage() {
             <div>
               <div className="text-sm font-medium text-blue-400">Facebook Graph API Explorer</div>
               <div className="text-xs text-neutral-500 mt-0.5">
-                App „GK Social Hub" → Generate Access Token → GET /me/accounts → Token kopieren
+                App „GK Social Hub“ → Generate Access Token → GET /me/accounts → Token kopieren
               </div>
             </div>
             <span className="ml-auto text-neutral-500 text-xs">↗</span>

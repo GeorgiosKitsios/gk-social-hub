@@ -100,9 +100,8 @@ function WeekCell({ day, posts, brandColor, onClick }: CellProps) {
 }
 
 function DayView({
-  anchor, allDayPosts, brandColor, onHourClick,
+  allDayPosts, brandColor, onHourClick,
 }: {
-  anchor:      Date;
   allDayPosts: Post[];
   brandColor:  string;
   onHourClick: (hour: number) => void;
@@ -314,7 +313,6 @@ export default function CalendarPage() {
 
         {view === 'day' && (
           <DayView
-            anchor={dayAnchor}
             allDayPosts={postsOnDay(dayAnchor)}
             brandColor={brandColor}
             onHourClick={h => {
