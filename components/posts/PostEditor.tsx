@@ -9,7 +9,8 @@ import { useMediaStore }    from '@/store/useMediaStore';
 import { Post, Platform, PostStatus, TemplateType } from '@/lib/types';
 import MediaPicker           from '@/components/media/MediaPicker';
 import AiAssistant           from '@/components/posts/AiAssistant';
-import FacebookPublishButton from '@/components/posts/FacebookPublishButton';
+import FacebookPublishButton  from '@/components/posts/FacebookPublishButton';
+import InstagramPublishButton from '@/components/posts/InstagramPublishButton';
 
 const PLATFORMS: { value: Platform; label: string }[] = [
   { value: 'facebook',  label: 'Facebook'  },
@@ -318,6 +319,19 @@ export default function PostEditor({ postId, presetDate }: Props) {
       {form.platforms.includes('facebook') && (
         <div className="px-4 py-2 border-b border-neutral-800 bg-neutral-950 shrink-0">
           <FacebookPublishButton
+            message={form.mainText}
+            mediaIds={form.mediaIds}
+            validationErrors={fbValidationErrors}
+            onSuccess={() => handleSave('published')}
+            onError={(e) => console.error(e)}
+          />
+        </div>
+      )}
+
+      {/* Instagram Button */}
+      {form.platforms.includes('instagram') && (
+        <div className="px-4 py-2 border-b border-neutral-800 bg-neutral-950 shrink-0">
+          <InstagramPublishButton
             message={form.mainText}
             mediaIds={form.mediaIds}
             validationErrors={fbValidationErrors}

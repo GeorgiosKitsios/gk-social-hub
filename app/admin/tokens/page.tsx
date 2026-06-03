@@ -8,7 +8,14 @@ interface FacebookPage {
   access_token: string;
 }
 
-const STORAGE_KEY = 'gk-facebook-pages';
+interface InstagramToken {
+  accountId:   string;
+  brandName:   string;
+  accessToken: string;
+}
+
+const FB_STORAGE_KEY = 'gk-facebook-pages';
+const IG_STORAGE_KEY = 'gk-instagram-tokens';
 
 const KNOWN_PAGES = [
   { id: '837133812826123', name: 'GK Skill Systems'  },
@@ -16,14 +23,27 @@ const KNOWN_PAGES = [
   { id: '133683950024890', name: 'FC Hellas München' },
 ];
 
+const KNOWN_IG_ACCOUNTS = [
+  { accountId: '17841470117662266', brandName: 'GK Pokale'         },
+  { accountId: '',                  brandName: 'GK Skill Systems'  },
+  { accountId: '',                  brandName: 'FC Hellas München' },
+];
+
 export default function AdminTokensPage() {
-  const [tokens,  setTokens]  = useState<Record<string, string>>({});
-  const [saved,   setSaved]   = useState(false);
-  const [current, setCurrent] = useState<FacebookPage[]>([]);
+  const [tokens,    setTokens]    = useState<Record<string, string>>({});
+  const [saved,     setSaved]     = useState(false);
+  const [current,   setCurrent]   = useState<FacebookPage[]>([]);
+
+  // Instagram State
+  const [igTokens,    setIgTokens]    = useState<Record<string, string>>({});   // accountId → token
+  const [igIds,       setIgIds]       = useState<Record<string, string>>({});   // brandName → accountId
+  const [igSaved,     setIgSaved]     = useState(false);
+  const [igCurrent,   setIgCurrent]   = useState<InstagramToken[]>([]);
 
   useEffect(() => {
+    // Facebook
     try {
-      const raw = localStorage.getItem(STORAGE_KEY);
+      const raw = localStorage.getItem(FB_STORAGE_KEY);
       if (raw) {
         const pages: FacebookPage[] = JSON.parse(raw);
         setCurrent(pages);
@@ -32,22 +52,60 @@ export default function AdminTokensPage() {
         setTokens(t);
       }
     } catch { /* ignore */ }
+
+    // Instagram
+    try {
+      const raw = localStorage.getItem(IG_STORAGE_KEY);
+      if (raw) {
+        const accounts: InstagramToken[] = JSON.parse(raw);
+        setIgCurrent(accounts);
+        const t: Record<string, string> = {};
+        const ids: Record<string, string> = {};
+        accounts.forEach(a => {
+          t[a.accountId]   = a.accessToken;
+          ids[a.brandName] = a.accountId;
+        });
+        setIgTokens(t);
+        setIgIds(ids);
+      }
+    } catch { /* ignore */ }
   }, []);
 
   function handleSave() {
     const pages: FacebookPage[] = KNOWN_PAGES
       .filter(p => tokens[p.id]?.trim())
       .map(p => ({ id: p.id, name: p.name, access_token: tokens[p.id].trim() }));
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(pages));
+    localStorage.setItem(FB_STORAGE_KEY, JSON.stringify(pages));
     setCurrent(pages);
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
   }
 
   function handleClear() {
-    localStorage.removeItem(STORAGE_KEY);
+    localStorage.removeItem(FB_STORAGE_KEY);
     setTokens({});
     setCurrent([]);
+  }
+
+  function handleIgSave() {
+    const accounts: InstagramToken[] = KNOWN_IG_ACCOUNTS
+      .map(a => {
+        const accountId   = igIds[a.brandName]?.trim() || a.accountId;
+        const accessToken = igTokens[accountId]?.trim() ?? '';
+        return { accountId, brandName: a.brandName, accessToken };
+      })
+      .filter(a => a.accountId && a.accessToken);
+    localStorage.setItem(IG_STORAGE_KEY, JSON.stringify(accounts));
+    setIgCurrent(accounts);
+    setIgSaved(true);
+    setTimeout(() => setIgSaved(false), 2000);
+  }
+
+  function handleIgClear() {
+    localStorage.removeItem(IG_STORAGE_KEY);
+    setIgTokens({});
+    setIgIds({});
+    setIgCurrent([]);
   }
 
   return (
@@ -83,14 +141,22 @@ export default function AdminTokensPage() {
             <span className="ml-auto text-neutral-500 text-xs">↗</span>
           </a>
 
-          {/* Instagram – kommt später */}
-          <div className="flex items-center gap-3 px-4 py-3 bg-neutral-900 border border-neutral-700 rounded-lg opacity-50">
+          {/* Instagram */}
+          <a
+            href="https://developers.facebook.com/tools/explorer"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-3 px-4 py-3 bg-purple-600/10 hover:bg-purple-600/20 border border-purple-500/30 rounded-lg transition-colors"
+          >
             <span className="text-lg">📸</span>
             <div>
-              <div className="text-sm font-medium text-neutral-400">Instagram Token erneuern</div>
-              <div className="text-xs text-neutral-600 mt-0.5">Folgt mit Instagram-Anbindung in Phase 3</div>
+              <div className="text-sm font-medium text-purple-400">Instagram Token erneuern</div>
+              <div className="text-xs text-neutral-500 mt-0.5">
+                Graph Explorer → instagram_basic + instagram_content_publish → Token kopieren
+              </div>
             </div>
-          </div>
+            <span className="ml-auto text-neutral-500 text-xs">↗</span>
+          </a>
         </div>
       </div>
 
@@ -148,6 +214,85 @@ export default function AdminTokensPage() {
 
       <p className="text-xs text-neutral-600 mt-4 text-center">
         Tokens laufen nach ~60 Tagen ab · Long-Lived Tokens folgen in Phase 3
+      </p>
+
+      {/* ── Instagram-Bereich ─────────────────────────────────── */}
+      <div className="mt-10 mb-6">
+        <h2 className="text-lg font-semibold text-white mb-1">📸 Instagram Tokens</h2>
+        <p className="text-sm text-neutral-400">
+          Instagram Business Account Tokens · Permissions: instagram_basic + instagram_content_publish
+        </p>
+      </div>
+
+      {/* Instagram Status */}
+      {igCurrent.length > 0 && (
+        <div className="mb-6 bg-purple-500/10 border border-purple-500/20 rounded-xl p-4">
+          <div className="text-sm font-medium text-purple-400 mb-2">✓ {igCurrent.length} Instagram-Account(s) gespeichert</div>
+          {igCurrent.map(a => (
+            <div key={a.accountId} className="text-xs text-neutral-400">
+              {a.brandName} · Account-ID: {a.accountId}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Instagram Token-Felder */}
+      <div className="flex flex-col gap-4 mb-6">
+        {KNOWN_IG_ACCOUNTS.map(account => {
+          const currentAccountId = igIds[account.brandName] ?? account.accountId ?? '';
+          const currentToken     = igTokens[currentAccountId] ?? '';
+          return (
+            <div key={account.brandName} className="bg-neutral-800 border border-neutral-700 rounded-xl p-4">
+              <div className="text-sm font-medium text-white mb-1">{account.brandName}</div>
+
+              <label className="block text-xs text-neutral-400 mb-1 mt-2">Instagram Business Account-ID</label>
+              <input
+                type="text"
+                value={currentAccountId}
+                onChange={e => setIgIds(ids => ({ ...ids, [account.brandName]: e.target.value }))}
+                placeholder="17841470117662266"
+                className="w-full bg-neutral-900 border border-neutral-600 rounded-lg px-3 py-2 text-xs text-white placeholder-neutral-600 focus:outline-none focus:border-purple-500 font-mono mb-3"
+              />
+
+              <label className="block text-xs text-neutral-400 mb-1">Access Token</label>
+              <textarea
+                value={currentToken}
+                onChange={e => {
+                  const id = igIds[account.brandName] ?? account.accountId ?? account.brandName;
+                  setIgTokens(t => ({ ...t, [id]: e.target.value }));
+                }}
+                rows={3}
+                placeholder="EAAUUtbZ..."
+                className="w-full bg-neutral-900 border border-neutral-600 rounded-lg px-3 py-2 text-xs text-white placeholder-neutral-600 focus:outline-none focus:border-purple-500 resize-none font-mono"
+              />
+              {igCurrent.find(a2 => a2.brandName === account.brandName) ? (
+                <div className="text-xs text-purple-400 mt-1">✓ Token gespeichert</div>
+              ) : (
+                <div className="text-xs text-neutral-600 mt-1">– Kein Token</div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Instagram Aktionen */}
+      <div className="flex gap-3">
+        <button
+          onClick={handleIgSave}
+          className="flex-1 py-2.5 rounded-lg bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white text-sm font-medium transition-colors"
+        >
+          {igSaved ? '✓ Gespeichert!' : 'Instagram-Tokens speichern'}
+        </button>
+        <button
+          onClick={handleIgClear}
+          className="px-4 py-2.5 rounded-lg border border-neutral-600 text-neutral-400 hover:text-red-400 hover:border-red-500 text-sm transition-colors"
+        >
+          Alle löschen
+        </button>
+      </div>
+
+      <p className="text-xs text-neutral-600 mt-4 text-center">
+        Instagram erfordert einen Business- oder Creator-Account · Permissions: instagram_basic, instagram_content_publish
       </p>
     </div>
   );
