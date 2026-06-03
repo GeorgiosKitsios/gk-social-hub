@@ -74,4 +74,5 @@ export interface Media {
     hashtags: string[];
   };
   uploadedAt: string;
+  storagePath?: string;
 }

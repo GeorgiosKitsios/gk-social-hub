@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { supabaseAdmin } from '@/lib/supabase';
+import { hasSupabaseAdminConfig, supabaseAdmin } from '@/lib/supabase';
 
 export async function POST(req: NextRequest) {
   console.log('[upload] ── POST /api/media/upload gestartet ──');
@@ -46,8 +46,12 @@ export async function POST(req: NextRequest) {
       step: 'env', error: 'NEXT_PUBLIC_SUPABASE_URL fehlt. In Hostinger Env-Variablen setzen.',
     }, { status: 500 });
   }
-  if (!serviceRoleKey) {
-    console.warn('[upload] Schritt 2 WARNUNG – SUPABASE_SERVICE_ROLE_KEY fehlt (RLS könnte blockieren).');
+  if (!serviceRoleKey || !hasSupabaseAdminConfig()) {
+    console.error('[upload] Schritt 2 FEHLER – SUPABASE_SERVICE_ROLE_KEY fehlt!');
+    return NextResponse.json({
+      step: 'env',
+      error: 'SUPABASE_SERVICE_ROLE_KEY fehlt. Server-Uploads und DB-Inserts benötigen den Service Role Key, damit RLS nicht blockiert.',
+    }, { status: 500 });
   }
 
   // ── Schritt 3: Datei direkt in Supabase Storage hochladen ────
@@ -112,16 +116,26 @@ export async function POST(req: NextRequest) {
   console.log('[upload] Schritt 5 OK – DB-Eintrag:', data.id);
 
   // ── Schritt 6: Erfolg – camelCase zurückgeben ────────────────
+  const mediaType = (data.media_type ?? 'image') as 'image' | 'video';
+  const createdAt = data.created_at ?? new Date().toISOString();
   const result = {
     id:           data.id,
     brandId:      data.brand_id,
-    type:         (data.media_type ?? 'image') as 'image' | 'video',
+    fileName:     data.file_name,
+    fileUrl:      data.file_url,
+    mediaType,
+    tags:         Array.isArray(data.tags) ? data.tags : [],
+    createdAt,
+    updatedAt:    data.updated_at ?? createdAt,
+    uploadedAt:   createdAt,
+
+    // Bestehende Frontend-/Store-Felder beibehalten.
+    type:         mediaType,
     filename:     data.file_name,
     url:          data.file_url,
     thumbnailUrl: data.file_url,
     sizeBytes:    data.size_bytes ?? file.size,
-    tags:         Array.isArray(data.tags) ? data.tags : [],
-    uploadedAt:   data.created_at ?? new Date().toISOString(),
+    storagePath:  data.storage_path ?? storagePath,
   };
   console.log('[upload] ── Erfolgreich abgeschlossen ──', result.id);
   return NextResponse.json(result);

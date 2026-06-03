@@ -21,7 +21,7 @@ export const supabase = createClient(
  *  NUR in API-Routes und Server-Code verwenden, nie im Browser! */
 export const supabaseAdmin = createClient(
   supabaseUrl ?? PLACEHOLDER_URL,
-  serviceRoleKey ?? supabaseKey ?? PLACEHOLDER_KEY,
+  serviceRoleKey ?? PLACEHOLDER_KEY,
   {
     auth: {
       autoRefreshToken: false,
@@ -29,3 +29,7 @@ export const supabaseAdmin = createClient(
     },
   }
 );
+
+export function hasSupabaseAdminConfig() {
+  return Boolean(supabaseUrl && serviceRoleKey);
+}
