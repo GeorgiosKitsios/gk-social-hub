@@ -3,9 +3,10 @@
 import { useState } from 'react';
 import { useMediaStore } from '@/store/useMediaStore';
 
-interface InstagramToken {
+interface InstagramAccount {
+  id:          string;
+  name:        string;
   accountId:   string;
-  brandName:   string;
   accessToken: string;
 }
 
@@ -17,20 +18,20 @@ interface Props {
   onError?:          (error: string) => void;
 }
 
-function loadTokens(): InstagramToken[] {
+function loadAccounts(): InstagramAccount[] {
   try {
-    const raw = localStorage.getItem('gk-instagram-tokens');
+    const raw = localStorage.getItem('gk-instagram-accounts');
     return raw ? JSON.parse(raw) : [];
   } catch { return []; }
 }
 
 export default function InstagramPublishButton({ message, mediaIds = [], validationErrors, onSuccess, onError }: Props) {
-  const [loading,      setLoading]      = useState(false);
-  const [showPicker,   setShowPicker]   = useState(false);
-  const [results,      setResults]      = useState<{ account: string; success: boolean; error?: string }[]>([]);
+  const [loading,    setLoading]    = useState(false);
+  const [showPicker, setShowPicker] = useState(false);
+  const [results,    setResults]    = useState<{ account: string; success: boolean; error?: string }[]>([]);
 
-  const { getById } = useMediaStore();
-  const tokens      = loadTokens();
+  const { getById }  = useMediaStore();
+  const accounts     = loadAccounts();
 
   const firstMedia = mediaIds.length > 0 ? getById(mediaIds[0]) : null;
   const imageUrl   = firstMedia?.type === 'image' ? firstMedia.url  : undefined;
@@ -39,21 +40,21 @@ export default function InstagramPublishButton({ message, mediaIds = [], validat
 
   // Interne Validierung
   const internalErrors: string[] = [];
-  if (tokens.length === 0)  internalErrors.push('Kein Instagram-Account verbunden.');
-  if (!hasMedia)             internalErrors.push('Instagram benötigt mindestens ein Bild oder Video.');
+  if (accounts.length === 0) internalErrors.push('Kein Instagram-Account verbunden.');
+  if (!hasMedia)              internalErrors.push('Instagram benötigt mindestens ein Bild oder Video.');
 
   const allErrors  = [...internalErrors, ...(validationErrors ?? [])];
   const canPublish = allErrors.length === 0;
 
-  async function publishToAccount(token: InstagramToken) {
+  async function publishToAccount(account: InstagramAccount) {
     setLoading(true);
     try {
       const res  = await fetch('/api/instagram/publish', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify({
-          accountId:   token.accountId,
-          accessToken: token.accessToken,
+          accountId:   account.accountId,
+          accessToken: account.accessToken,
           caption:     message,
           imageUrl,
           videoUrl,
@@ -62,15 +63,15 @@ export default function InstagramPublishButton({ message, mediaIds = [], validat
       const data = await res.json();
 
       if (data.success) {
-        setResults(r => [...r, { account: token.brandName, success: true }]);
-        onSuccess?.(data.postId, token.brandName);
+        setResults(r => [...r, { account: account.name, success: true }]);
+        onSuccess?.(data.postId, account.name);
       } else {
-        setResults(r => [...r, { account: token.brandName, success: false, error: data.error }]);
+        setResults(r => [...r, { account: account.name, success: false, error: data.error }]);
         onError?.(data.error);
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Fehler';
-      setResults(r => [...r, { account: token.brandName, success: false, error: msg }]);
+      setResults(r => [...r, { account: account.name, success: false, error: msg }]);
       onError?.(msg);
     } finally {
       setLoading(false);
@@ -80,8 +81,8 @@ export default function InstagramPublishButton({ message, mediaIds = [], validat
   async function publishAll() {
     setResults([]);
     setShowPicker(false);
-    for (const token of tokens) {
-      await publishToAccount(token);
+    for (const account of accounts) {
+      await publishToAccount(account);
     }
   }
 
@@ -123,10 +124,10 @@ export default function InstagramPublishButton({ message, mediaIds = [], validat
         >
           {loading
             ? <><div className="w-3 h-3 border border-white border-t-transparent rounded-full animate-spin" /> Wird gepostet…</>
-            : <>📸 Auf Instagram ({tokens.length}) posten</>
+            : <>📸 Auf Instagram ({accounts.length}) posten</>
           }
         </button>
-        {tokens.length > 1 && (
+        {accounts.length > 1 && (
           <button
             onClick={() => setShowPicker(o => !o)}
             disabled={loading}
@@ -146,7 +147,7 @@ export default function InstagramPublishButton({ message, mediaIds = [], validat
               <span>{err}</span>
             </p>
           ))}
-          {tokens.length === 0 && (
+          {accounts.length === 0 && (
             <a href="/admin/tokens" className="text-xs text-blue-400 hover:text-blue-300 transition-colors mt-0.5">
               → Instagram-Token hinzufügen
             </a>
@@ -157,12 +158,12 @@ export default function InstagramPublishButton({ message, mediaIds = [], validat
       {/* Account-Auswahl */}
       {showPicker && (
         <div className="flex flex-col gap-1.5 p-2 bg-neutral-900 rounded-lg border border-neutral-700">
-          {tokens.map(token => (
-            <button key={token.accountId}
-              onClick={() => { publishToAccount(token); setShowPicker(false); }}
+          {accounts.map(account => (
+            <button key={account.id}
+              onClick={() => { publishToAccount(account); setShowPicker(false); }}
               disabled={loading || !canPublish}
               className="text-xs px-3 py-2 rounded-md border border-neutral-700 text-neutral-300 hover:text-white hover:border-pink-500 transition-colors text-left disabled:opacity-40">
-              📸 {token.brandName}
+              📸 {account.name}
             </button>
           ))}
         </div>

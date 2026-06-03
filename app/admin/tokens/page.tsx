@@ -2,54 +2,66 @@
 
 import { useState, useEffect } from 'react';
 
+// ── Typen ────────────────────────────────────────────────────────────────────
+
 interface FacebookPage {
   id:           string;
   name:         string;
   access_token: string;
 }
 
-interface InstagramToken {
+interface InstagramAccount {
+  id:          string;
+  name:        string;
   accountId:   string;
-  brandName:   string;
   accessToken: string;
 }
 
-const FB_STORAGE_KEY = 'gk-facebook-pages';
-const IG_STORAGE_KEY = 'gk-instagram-tokens';
+// ── Konstanten ───────────────────────────────────────────────────────────────
 
-const KNOWN_PAGES = [
+const FB_STORAGE_KEY = 'gk-facebook-pages';
+const IG_STORAGE_KEY = 'gk-instagram-accounts';
+
+const KNOWN_FB_PAGES = [
   { id: '837133812826123', name: 'GK Skill Systems'  },
   { id: '456579734205552', name: 'GK Pokale'         },
   { id: '133683950024890', name: 'FC Hellas München' },
 ];
 
-const KNOWN_IG_ACCOUNTS = [
-  { accountId: '17841470117662266', brandName: 'GK Pokale'         },
-  { accountId: '',                  brandName: 'GK Skill Systems'  },
-  { accountId: '',                  brandName: 'FC Hellas München' },
+const KNOWN_IG_BRANDS = [
+  { id: 'gk-skill-systems',  name: 'GK Skill Systems',  defaultAccountId: ''                  },
+  { id: 'gk-pokale',         name: 'GK Pokale',          defaultAccountId: '17841470117662266' },
+  { id: 'fc-hellas',         name: 'FC Hellas München',  defaultAccountId: ''                  },
+  { id: 'gk-sports-group',   name: 'GK Sports Group',    defaultAccountId: ''                  },
+  { id: 'georgios-kitsios',  name: 'Georgios Kitsios',   defaultAccountId: ''                  },
 ];
 
+// ── Komponente ───────────────────────────────────────────────────────────────
+
 export default function AdminTokensPage() {
-  const [tokens,    setTokens]    = useState<Record<string, string>>({});
-  const [saved,     setSaved]     = useState(false);
-  const [current,   setCurrent]   = useState<FacebookPage[]>([]);
 
-  // Instagram State
-  const [igTokens,    setIgTokens]    = useState<Record<string, string>>({});   // accountId → token
-  const [igIds,       setIgIds]       = useState<Record<string, string>>({});   // brandName → accountId
-  const [igSaved,     setIgSaved]     = useState(false);
-  const [igCurrent,   setIgCurrent]   = useState<InstagramToken[]>([]);
+  // ── Facebook State ──────────────────────────────────────────────────────
+  const [fbTokens,  setFbTokens]  = useState<Record<string, string>>({});
+  const [fbSaved,   setFbSaved]   = useState(false);
+  const [fbCurrent, setFbCurrent] = useState<FacebookPage[]>([]);
 
+  // ── Instagram State ─────────────────────────────────────────────────────
+  // igForm: keyed by brand.id → { accountId, accessToken }
+  const [igForm,    setIgForm]    = useState<Record<string, { accountId: string; accessToken: string }>>({});
+  const [igSaved,   setIgSaved]   = useState(false);
+  const [igCurrent, setIgCurrent] = useState<InstagramAccount[]>([]);
+
+  // ── Hydration aus localStorage ──────────────────────────────────────────
   useEffect(() => {
     // Facebook
     try {
       const raw = localStorage.getItem(FB_STORAGE_KEY);
       if (raw) {
         const pages: FacebookPage[] = JSON.parse(raw);
-        setCurrent(pages);
+        setFbCurrent(pages);
         const t: Record<string, string> = {};
         pages.forEach(p => { t[p.id] = p.access_token; });
-        setTokens(t);
+        setFbTokens(t);
       }
     } catch { /* ignore */ }
 
@@ -57,44 +69,44 @@ export default function AdminTokensPage() {
     try {
       const raw = localStorage.getItem(IG_STORAGE_KEY);
       if (raw) {
-        const accounts: InstagramToken[] = JSON.parse(raw);
+        const accounts: InstagramAccount[] = JSON.parse(raw);
         setIgCurrent(accounts);
-        const t: Record<string, string> = {};
-        const ids: Record<string, string> = {};
+        const form: Record<string, { accountId: string; accessToken: string }> = {};
         accounts.forEach(a => {
-          t[a.accountId]   = a.accessToken;
-          ids[a.brandName] = a.accountId;
+          form[a.id] = { accountId: a.accountId, accessToken: a.accessToken };
         });
-        setIgTokens(t);
-        setIgIds(ids);
+        setIgForm(form);
       }
     } catch { /* ignore */ }
   }, []);
 
-  function handleSave() {
-    const pages: FacebookPage[] = KNOWN_PAGES
-      .filter(p => tokens[p.id]?.trim())
-      .map(p => ({ id: p.id, name: p.name, access_token: tokens[p.id].trim() }));
+  // ── Facebook Handler ────────────────────────────────────────────────────
+  function handleFbSave() {
+    const pages: FacebookPage[] = KNOWN_FB_PAGES
+      .filter(p => fbTokens[p.id]?.trim())
+      .map(p => ({ id: p.id, name: p.name, access_token: fbTokens[p.id].trim() }));
     localStorage.setItem(FB_STORAGE_KEY, JSON.stringify(pages));
-    setCurrent(pages);
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
+    setFbCurrent(pages);
+    setFbSaved(true);
+    setTimeout(() => setFbSaved(false), 2000);
   }
 
-  function handleClear() {
+  function handleFbClear() {
     localStorage.removeItem(FB_STORAGE_KEY);
-    setTokens({});
-    setCurrent([]);
+    setFbTokens({});
+    setFbCurrent([]);
   }
 
+  // ── Instagram Handler ───────────────────────────────────────────────────
   function handleIgSave() {
-    const accounts: InstagramToken[] = KNOWN_IG_ACCOUNTS
-      .map(a => {
-        const accountId   = igIds[a.brandName]?.trim() || a.accountId;
-        const accessToken = igTokens[accountId]?.trim() ?? '';
-        return { accountId, brandName: a.brandName, accessToken };
-      })
-      .filter(a => a.accountId && a.accessToken);
+    const accounts: InstagramAccount[] = KNOWN_IG_BRANDS
+      .filter(b => igForm[b.id]?.accountId?.trim() && igForm[b.id]?.accessToken?.trim())
+      .map(b => ({
+        id:          b.id,
+        name:        b.name,
+        accountId:   igForm[b.id].accountId.trim(),
+        accessToken: igForm[b.id].accessToken.trim(),
+      }));
     localStorage.setItem(IG_STORAGE_KEY, JSON.stringify(accounts));
     setIgCurrent(accounts);
     setIgSaved(true);
@@ -103,19 +115,27 @@ export default function AdminTokensPage() {
 
   function handleIgClear() {
     localStorage.removeItem(IG_STORAGE_KEY);
-    setIgTokens({});
-    setIgIds({});
+    setIgForm({});
     setIgCurrent([]);
   }
 
+  function setIgField(brandId: string, field: 'accountId' | 'accessToken', value: string) {
+    setIgForm(prev => ({
+      ...prev,
+      [brandId]: { ...prev[brandId], [field]: value },
+    }));
+  }
+
+  // ── JSX ──────────────────────────────────────────────────────────────────
   return (
     <div className="p-6 max-w-2xl mx-auto">
 
-      {/* Header */}
+      {/* ════ FACEBOOK ════════════════════════════════════════════════════ */}
+
       <div className="mb-6">
         <h1 className="text-xl font-semibold text-white">🔑 Token Manager</h1>
         <p className="text-sm text-neutral-400 mt-0.5">
-          Facebook Page Access Tokens verwalten · laufen nach ~60 Tagen ab
+          Facebook &amp; Instagram Access Tokens verwalten · laufen nach ~60 Tagen ab
         </p>
       </div>
 
@@ -123,36 +143,30 @@ export default function AdminTokensPage() {
       <div className="bg-neutral-800 border border-neutral-700 rounded-xl p-4 mb-6">
         <div className="text-sm font-medium text-white mb-3">Token erneuern</div>
         <div className="flex flex-col gap-2">
-
-          {/* Facebook */}
           <a
             href="https://developers.facebook.com/tools/explorer"
-            target="_blank"
-            rel="noopener noreferrer"
+            target="_blank" rel="noopener noreferrer"
             className="flex items-center gap-3 px-4 py-3 bg-blue-600/10 hover:bg-blue-600/20 border border-blue-500/30 rounded-lg transition-colors"
           >
             <span className="text-lg">📘</span>
             <div>
-              <div className="text-sm font-medium text-blue-400">Facebook Graph API Explorer öffnen</div>
+              <div className="text-sm font-medium text-blue-400">Facebook Graph API Explorer</div>
               <div className="text-xs text-neutral-500 mt-0.5">
-                1. App „GK Social Hub" wählen → 2. Generate Access Token → 3. GET /me/accounts → 4. Token kopieren
+                App „GK Social Hub" → Generate Access Token → GET /me/accounts → Token kopieren
               </div>
             </div>
             <span className="ml-auto text-neutral-500 text-xs">↗</span>
           </a>
-
-          {/* Instagram */}
           <a
             href="https://developers.facebook.com/tools/explorer"
-            target="_blank"
-            rel="noopener noreferrer"
+            target="_blank" rel="noopener noreferrer"
             className="flex items-center gap-3 px-4 py-3 bg-purple-600/10 hover:bg-purple-600/20 border border-purple-500/30 rounded-lg transition-colors"
           >
             <span className="text-lg">📸</span>
             <div>
               <div className="text-sm font-medium text-purple-400">Instagram Token erneuern</div>
               <div className="text-xs text-neutral-500 mt-0.5">
-                Graph Explorer → instagram_basic + instagram_content_publish → Token kopieren
+                Graph Explorer → Permissions: instagram_basic + instagram_content_publish → Token kopieren
               </div>
             </div>
             <span className="ml-auto text-neutral-500 text-xs">↗</span>
@@ -160,64 +174,61 @@ export default function AdminTokensPage() {
         </div>
       </div>
 
-      {/* Aktueller Status */}
-      {current.length > 0 && (
-        <div className="mb-6 bg-green-500/10 border border-green-500/20 rounded-xl p-4">
-          <div className="text-sm font-medium text-green-400 mb-2">✓ {current.length} Pages gespeichert</div>
-          {current.map(p => (
-            <div key={p.id} className="text-xs text-neutral-400">
-              {p.name} · ID: {p.id}
-            </div>
+      {/* Facebook Status */}
+      {fbCurrent.length > 0 && (
+        <div className="mb-4 bg-green-500/10 border border-green-500/20 rounded-xl p-4">
+          <div className="text-sm font-medium text-green-400 mb-2">✓ {fbCurrent.length} Facebook Pages gespeichert</div>
+          {fbCurrent.map(p => (
+            <div key={p.id} className="text-xs text-neutral-400">{p.name} · ID: {p.id}</div>
           ))}
         </div>
       )}
 
-      {/* Token-Felder */}
+      {/* Facebook Token-Felder */}
       <div className="flex flex-col gap-4 mb-6">
-        {KNOWN_PAGES.map(page => (
+        {KNOWN_FB_PAGES.map(page => (
           <div key={page.id} className="bg-neutral-800 border border-neutral-700 rounded-xl p-4">
             <div className="text-sm font-medium text-white mb-1">{page.name}</div>
             <div className="text-xs text-neutral-500 mb-3">Page ID: {page.id}</div>
             <label className="block text-xs text-neutral-400 mb-1">Page Access Token</label>
             <textarea
-              value={tokens[page.id] ?? ''}
-              onChange={e => setTokens(t => ({ ...t, [page.id]: e.target.value }))}
+              value={fbTokens[page.id] ?? ''}
+              onChange={e => setFbTokens(t => ({ ...t, [page.id]: e.target.value }))}
               rows={3}
               placeholder="EAAUUtbZ..."
               className="w-full bg-neutral-900 border border-neutral-600 rounded-lg px-3 py-2 text-xs text-white placeholder-neutral-600 focus:outline-none focus:border-blue-500 resize-none font-mono"
             />
-            {/* Token-Status */}
-            {current.find(p => p.id === page.id) ? (
-              <div className="text-xs text-green-400 mt-1">✓ Token gespeichert</div>
-            ) : (
-              <div className="text-xs text-neutral-600 mt-1">– Kein Token</div>
-            )}
+            {fbCurrent.find(p2 => p2.id === page.id)
+              ? <div className="text-xs text-green-400 mt-1">✓ Token gespeichert</div>
+              : <div className="text-xs text-neutral-600 mt-1">– Kein Token</div>
+            }
           </div>
         ))}
       </div>
 
-      {/* Aktionen */}
+      {/* Facebook Aktionen */}
       <div className="flex gap-3">
         <button
-          onClick={handleSave}
+          onClick={handleFbSave}
           className="flex-1 py-2.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium transition-colors"
         >
-          {saved ? '✓ Gespeichert!' : 'Tokens speichern'}
+          {fbSaved ? '✓ Gespeichert!' : 'Facebook Tokens speichern'}
         </button>
         <button
-          onClick={handleClear}
+          onClick={handleFbClear}
           className="px-4 py-2.5 rounded-lg border border-neutral-600 text-neutral-400 hover:text-red-400 hover:border-red-500 text-sm transition-colors"
         >
           Alle löschen
         </button>
       </div>
 
-      <p className="text-xs text-neutral-600 mt-4 text-center">
+      <p className="text-xs text-neutral-600 mt-4 mb-10 text-center">
         Tokens laufen nach ~60 Tagen ab · Long-Lived Tokens folgen in Phase 3
       </p>
 
-      {/* ── Instagram-Bereich ─────────────────────────────────── */}
-      <div className="mt-10 mb-6">
+      {/* ════ INSTAGRAM ═══════════════════════════════════════════════════ */}
+
+      <div className="border-t border-neutral-800 pt-10 mb-6">
         <h2 className="text-lg font-semibold text-white mb-1">📸 Instagram Tokens</h2>
         <p className="text-sm text-neutral-400">
           Instagram Business Account Tokens · Permissions: instagram_basic + instagram_content_publish
@@ -226,50 +237,44 @@ export default function AdminTokensPage() {
 
       {/* Instagram Status */}
       {igCurrent.length > 0 && (
-        <div className="mb-6 bg-purple-500/10 border border-purple-500/20 rounded-xl p-4">
+        <div className="mb-4 bg-purple-500/10 border border-purple-500/20 rounded-xl p-4">
           <div className="text-sm font-medium text-purple-400 mb-2">✓ {igCurrent.length} Instagram-Account(s) gespeichert</div>
           {igCurrent.map(a => (
-            <div key={a.accountId} className="text-xs text-neutral-400">
-              {a.brandName} · Account-ID: {a.accountId}
-            </div>
+            <div key={a.id} className="text-xs text-neutral-400">{a.name} · Account-ID: {a.accountId}</div>
           ))}
         </div>
       )}
 
       {/* Instagram Token-Felder */}
       <div className="flex flex-col gap-4 mb-6">
-        {KNOWN_IG_ACCOUNTS.map(account => {
-          const currentAccountId = igIds[account.brandName] ?? account.accountId ?? '';
-          const currentToken     = igTokens[currentAccountId] ?? '';
+        {KNOWN_IG_BRANDS.map(brand => {
+          const entry = igForm[brand.id] ?? { accountId: brand.defaultAccountId, accessToken: '' };
+          const isSaved = !!igCurrent.find(a => a.id === brand.id);
           return (
-            <div key={account.brandName} className="bg-neutral-800 border border-neutral-700 rounded-xl p-4">
-              <div className="text-sm font-medium text-white mb-1">{account.brandName}</div>
+            <div key={brand.id} className="bg-neutral-800 border border-neutral-700 rounded-xl p-4">
+              <div className="text-sm font-medium text-white mb-3">{brand.name}</div>
 
-              <label className="block text-xs text-neutral-400 mb-1 mt-2">Instagram Business Account-ID</label>
+              <label className="block text-xs text-neutral-400 mb-1">Instagram Business Account-ID</label>
               <input
                 type="text"
-                value={currentAccountId}
-                onChange={e => setIgIds(ids => ({ ...ids, [account.brandName]: e.target.value }))}
+                value={entry.accountId}
+                onChange={e => setIgField(brand.id, 'accountId', e.target.value)}
                 placeholder="17841470117662266"
                 className="w-full bg-neutral-900 border border-neutral-600 rounded-lg px-3 py-2 text-xs text-white placeholder-neutral-600 focus:outline-none focus:border-purple-500 font-mono mb-3"
               />
 
               <label className="block text-xs text-neutral-400 mb-1">Access Token</label>
               <textarea
-                value={currentToken}
-                onChange={e => {
-                  const id = igIds[account.brandName] ?? account.accountId ?? account.brandName;
-                  setIgTokens(t => ({ ...t, [id]: e.target.value }));
-                }}
+                value={entry.accessToken}
+                onChange={e => setIgField(brand.id, 'accessToken', e.target.value)}
                 rows={3}
                 placeholder="EAAUUtbZ..."
                 className="w-full bg-neutral-900 border border-neutral-600 rounded-lg px-3 py-2 text-xs text-white placeholder-neutral-600 focus:outline-none focus:border-purple-500 resize-none font-mono"
               />
-              {igCurrent.find(a2 => a2.brandName === account.brandName) ? (
-                <div className="text-xs text-purple-400 mt-1">✓ Token gespeichert</div>
-              ) : (
-                <div className="text-xs text-neutral-600 mt-1">– Kein Token</div>
-              )}
+              {isSaved
+                ? <div className="text-xs text-purple-400 mt-1">✓ Token gespeichert</div>
+                : <div className="text-xs text-neutral-600 mt-1">– Kein Token</div>
+              }
             </div>
           );
         })}
