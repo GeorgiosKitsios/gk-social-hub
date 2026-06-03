@@ -38,6 +38,21 @@ export default function InstagramPublishButton({ message, mediaIds = [], validat
   const videoUrl   = firstMedia?.type === 'video' ? firstMedia.url  : undefined;
   const hasMedia   = !!imageUrl || !!videoUrl;
 
+  // Client-Diagnose beim Mount
+  if (typeof window !== 'undefined') {
+    console.log('[IG Button] Diagnose:', {
+      mediaIds,
+      firstMedia:       firstMedia ? { id: firstMedia.id, type: firstMedia.type, url: firstMedia.url?.slice(0, 60) } : null,
+      imageUrl_type:    imageUrl?.startsWith('data:')  ? 'BASE64 ⚠️' :
+                        imageUrl?.startsWith('https:') ? 'HTTPS ✓'   :
+                        imageUrl ? 'andere' : '(kein)',
+      videoUrl_set:     !!videoUrl,
+      hasMedia,
+      accounts_count:   accounts.length,
+      accounts:         accounts.map(a => ({ name: a.name, accountId: a.accountId, token_set: !!a.accessToken })),
+    });
+  }
+
   // Interne Validierung
   const internalErrors: string[] = [];
   if (accounts.length === 0) internalErrors.push('Kein Instagram-Account verbunden.');
@@ -48,19 +63,31 @@ export default function InstagramPublishButton({ message, mediaIds = [], validat
 
   async function publishToAccount(account: InstagramAccount) {
     setLoading(true);
+    console.log('[IG Button] publishToAccount gestartet:', {
+      accountName: account.name,
+      accountId:   account.accountId,
+      token_set:   !!account.accessToken,
+      token_prefix: account.accessToken ? account.accessToken.slice(0, 8) + '…' : '(fehlt)',
+      imageUrl_type: imageUrl?.startsWith('data:')  ? 'BASE64 ⚠️ Instagram braucht HTTPS!' :
+                     imageUrl?.startsWith('https:') ? 'HTTPS ✓' : imageUrl ? 'andere' : '(kein)',
+      hasImage:    !!imageUrl,
+      hasVideo:    !!videoUrl,
+    });
     try {
+      const payload = {
+        accountId:   account.accountId,
+        accessToken: account.accessToken,
+        caption:     message,
+        imageUrl,
+        videoUrl,
+      };
       const res  = await fetch('/api/instagram/publish', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({
-          accountId:   account.accountId,
-          accessToken: account.accessToken,
-          caption:     message,
-          imageUrl,
-          videoUrl,
-        }),
+        body:    JSON.stringify(payload),
       });
       const data = await res.json();
+      console.log('[IG Button] Server-Antwort:', { httpStatus: res.status, data });
 
       if (data.success) {
         setResults(r => [...r, { account: account.name, success: true }]);
@@ -71,6 +98,7 @@ export default function InstagramPublishButton({ message, mediaIds = [], validat
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Fehler';
+      console.error('[IG Button] Netzwerkfehler:', err);
       setResults(r => [...r, { account: account.name, success: false, error: msg }]);
       onError?.(msg);
     } finally {
