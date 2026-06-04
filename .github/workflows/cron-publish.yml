@@ -22,9 +22,15 @@ jobs:
             --silent \
             --show-error \
             --fail-with-body \
+            --retry 2 \
             --max-time 60 \
+            --request POST \
+            --header "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            --header "Accept: application/json" \
+            --header "Cache-Control: no-cache" \
+            --header "User-Agent: GK-Social-Hub-Cron/1.0" \
             --write-out "\n---HTTP_STATUS:%{http_code}" \
-            "https://blueviolet-armadillo-356286.hostingersite.com/api/cron/publish?secret=${{ secrets.CRON_SECRET }}")
+            "https://blueviolet-armadillo-356286.hostingersite.com/api/cron/publish")
 
           HTTP_STATUS=$(echo "$RESPONSE" | grep -o 'HTTP_STATUS:[0-9]*' | cut -d: -f2)
           BODY=$(echo "$RESPONSE" | sed '/^---HTTP_STATUS:/d')

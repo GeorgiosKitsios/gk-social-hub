@@ -1,8 +1,9 @@
 /**
  * app/api/cron/publish/route.ts
  *
- * Automatischer Publish-Job – wird von Hostinger Cron Jobs alle 5 Minuten aufgerufen:
- *   GET https://deine-domain.com/api/cron/publish?secret=DEIN_CRON_SECRET
+ * Automatischer Publish-Job – wird von GitHub Actions/Hostinger Cron Jobs aufgerufen:
+ *   POST https://deine-domain.com/api/cron/publish
+ *   Authorization: Bearer DEIN_CRON_SECRET
  *
  * Benötigte Supabase-Tabellen:
  *   posts         – id, brand_id, title, main_text, platform_texts(jsonb),
@@ -23,6 +24,7 @@ const FB_API = 'https://graph.facebook.com/v19.0';
 
 // Erzwinge serverseitiges Rendering — kein statisches Caching
 export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 export const runtime = 'nodejs';
 
 // ── Typen ─────────────────────────────────────────────────────────────────────
@@ -52,9 +54,15 @@ interface MediaRow {
   media_type?: string | null;
 }
 
-// ── GET-Handler ───────────────────────────────────────────────────────────────
+// ── GET-/POST-Handler ─────────────────────────────────────────────────────────
 
-export async function GET(req: NextRequest) {
+function getBearerToken(req: NextRequest) {
+  const authHeader = req.headers.get('authorization') ?? '';
+  const match = authHeader.match(/^Bearer\s+(.+)$/i);
+  return match?.[1]?.trim() ?? '';
+}
+
+async function runPublishJob(req: NextRequest) {
   const startTime = Date.now();
   const runAt     = new Date().toISOString();
   console.log('[CRON] ── publish job gestartet ──', runAt);
@@ -70,9 +78,7 @@ export async function GET(req: NextRequest) {
   try {
 
     // ── 1. CRON_SECRET prüfen ─────────────────────────────────────────────────
-    const providedSecret = req.nextUrl.searchParams.get('secret')
-      ?? req.headers.get('x-cron-secret')
-      ?? '';
+    const providedSecret = getBearerToken(req);
     const cronSecret = process.env.CRON_SECRET ?? '';
 
     console.log('[CRON] Schritt 1 – Secret-Check:', {
@@ -164,7 +170,6 @@ export async function GET(req: NextRequest) {
 
       const fbResults: Array<{ page: string; success: boolean; postId?: string; error?: string }> = [];
       let anySuccess      = false;
-      let anyError        = false;
       const errorMessages: string[] = [];
 
       // ── Facebook ────────────────────────────────────────────────────────────
@@ -176,7 +181,6 @@ export async function GET(req: NextRequest) {
           const msg = `Keine Facebook-Page für Brand "${post.brand_id}" in Tabelle facebook_pages gefunden.`;
           console.warn(`[CRON]   ⚠ ${msg}`);
           errorMessages.push(msg);
-          anyError = true;
         }
 
         for (const page of pagesForBrand) {
@@ -235,7 +239,6 @@ export async function GET(req: NextRequest) {
               console.error(`[CRON]   ✕ ${page.name}: ${errMsg}`);
               fbResults.push({ page: page.name, success: false, error: errMsg });
               errorMessages.push(`FB ${page.name}: ${errMsg}`);
-              anyError = true;
             } else {
               console.log(`[CRON]   ✓ ${page.name}: Post-ID ${fbData.id}`);
               fbResults.push({ page: page.name, success: true, postId: fbData.id });
@@ -247,7 +250,6 @@ export async function GET(req: NextRequest) {
             console.error(`[CRON]   ✕ ${page.name} Exception:`, errMsg);
             fbResults.push({ page: page.name, success: false, error: errMsg });
             errorMessages.push(`FB ${page.name}: ${errMsg}`);
-            anyError = true;
           }
         }
       } else {
@@ -316,4 +318,12 @@ export async function GET(req: NextRequest) {
     });
     // Bewusst kein status: 500 → GitHub Actions soll nicht fehlschlagen
   }
+}
+
+export async function GET(req: NextRequest) {
+  return runPublishJob(req);
+}
+
+export async function POST(req: NextRequest) {
+  return runPublishJob(req);
 }
