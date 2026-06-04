@@ -14,152 +14,40 @@ jobs:
     timeout-minutes: 4
 
     steps:
-      - name: Cron-Route diagnostizieren
+      - name: Fällige Posts veröffentlichen
         env:
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
-          CRON_BASE_URL: https://blueviolet-armadillo-356286.hostingersite.com
+          CRON_URL: https://blueviolet-armadillo-356286.hostingersite.com/api/cron/publish
         run: |
           set -u
 
-          echo "Diagnose Cron-Route gestartet: $(date -u)"
-          echo "Ziel: ${CRON_BASE_URL}/api/cron/publish"
-          echo "Hinweis: CRON_SECRET wird nicht ausgegeben."
+          body_file="$(mktemp)"
+          status="$(curl \
+            --silent \
+            --show-error \
+            --retry 0 \
+            --max-time 60 \
+            --request POST \
+            --output "$body_file" \
+            --write-out "%{http_code}" \
+            --header "Authorization: Bearer ${CRON_SECRET}" \
+            --header "Accept: application/json" \
+            --header "Cache-Control: no-cache" \
+            --header "User-Agent: Mozilla/5.0" \
+            "$CRON_URL" || true)"
 
-          LAST_STATUS=""
-          POST_AUTH_STATUS=""
-          POST_BROWSER_STATUS=""
-
-          print_relevant_headers() {
-            local headers_file="$1"
-            # Header normalisieren, CR entfernen und nur für die Diagnose relevante Header zeigen.
-            awk '
-              {
-                gsub(/\r$/, "")
-                line = tolower($0)
-              }
-              line ~ /^(http\/|server:|date:|content-type:|content-length:|location:|cache-control:|cf-|x-|vary:|allow:)/ {
-                print
-              }
-            ' "$headers_file"
-          }
-
-          run_probe() {
-            local label="$1"
-            local method="$2"
-            local path="$3"
-            local auth_mode="$4"
-            local user_agent="$5"
-            local url="${CRON_BASE_URL}${path}"
-            local headers_file body_file status
-
-            headers_file="$(mktemp)"
-            body_file="$(mktemp)"
-
+          echo "HTTP Status: ${status:-curl-error}"
+          echo "Response Body:"
+          if [ -s "$body_file" ]; then
+            cat "$body_file"
             echo ""
-            echo "============================================================"
-            echo "${label}"
-            echo "Methode: ${method}"
-            echo "URL: ${url}"
-            echo "Authorization: ${auth_mode}"
-            echo "User-Agent: ${user_agent}"
-            echo "------------------------------------------------------------"
-
-            local curl_args=(
-              --silent
-              --show-error
-              --retry 0
-              --max-time 60
-              --request "$method"
-              --dump-header "$headers_file"
-              --output "$body_file"
-              --write-out "%{http_code}"
-              --header "Accept: application/json"
-              --header "Cache-Control: no-cache"
-              --header "User-Agent: ${user_agent}"
-            )
-
-            if [ "$auth_mode" = "Bearer CRON_SECRET" ]; then
-              curl_args+=(--header "Authorization: Bearer ${CRON_SECRET:-}")
-            fi
-
-            # Kein --fail-with-body: Auch 401/403 sollen Body und Header ausgeben.
-            status="$(curl "${curl_args[@]}" "$url" || true)"
-            LAST_STATUS="$status"
-
-            echo "HTTP Status: ${status:-curl-error}"
-            echo "Relevante Response Header:"
-            print_relevant_headers "$headers_file" || true
-            echo "Response Body:"
-            if [ -s "$body_file" ]; then
-              cat "$body_file"
-              echo ""
-            else
-              echo "(leer)"
-            fi
-
-            rm -f "$headers_file" "$body_file"
-          }
-
-          run_probe \
-            "A) GET /api/cron/publish ohne Secret — erwartet 401, wenn Next.js erreicht wird" \
-            "GET" \
-            "/api/cron/publish" \
-            "none" \
-            "GK-Social-Hub-Cron/1.0"
-
-          run_probe \
-            "B) GET /api/cron/publish mit Authorization Bearer — erwartet 200/JSON der Route" \
-            "GET" \
-            "/api/cron/publish" \
-            "Bearer CRON_SECRET" \
-            "GK-Social-Hub-Cron/1.0"
-
-          run_probe \
-            "C) POST /api/cron/publish ohne Authorization — erwartet 401, wenn POST Next.js erreicht" \
-            "POST" \
-            "/api/cron/publish" \
-            "none" \
-            "GK-Social-Hub-Cron/1.0"
-
-          run_probe \
-            "D) POST /api/cron/publish mit Authorization Bearer — bisheriger Cron-Request" \
-            "POST" \
-            "/api/cron/publish" \
-            "Bearer CRON_SECRET" \
-            "GK-Social-Hub-Cron/1.0"
-          POST_AUTH_STATUS="$LAST_STATUS"
-
-          run_probe \
-            "E) POST /api/cron/publish mit Authorization Bearer und neutralem Browser User-Agent" \
-            "POST" \
-            "/api/cron/publish" \
-            "Bearer CRON_SECRET" \
-            "Mozilla/5.0"
-          POST_BROWSER_STATUS="$LAST_STATUS"
-
-          run_probe \
-            "F) GET /api/cron/health ohne Secret — prüft, ob /api/cron/* grundsätzlich erreichbar ist" \
-            "GET" \
-            "/api/cron/health" \
-            "none" \
-            "GK-Social-Hub-Cron/1.0"
-
-          echo ""
-          echo "============================================================"
-          echo "Diagnose-Zusammenfassung"
-          echo "D POST mit Cron User-Agent Status: ${POST_AUTH_STATUS:-unbekannt}"
-          echo "E POST mit Browser User-Agent Status: ${POST_BROWSER_STATUS:-unbekannt}"
-          echo ""
-          echo "Interpretation:"
-          echo "- 401 bei A/C bedeutet: Next.js wurde erreicht und der Secret-Check greift."
-          echo "- 403 bei A/F bedeutet: Hostinger blockiert vermutlich Pfad /api/cron/* oder vorgelagerte Regeln."
-          echo "- 403 bei C, aber 401 bei A bedeutet: POST wird vermutlich blockiert."
-          echo "- 403 nur bei B/D/E mit Authorization bedeutet: Authorization Header wird vermutlich blockiert."
-          echo "- Unterschied zwischen D und E bedeutet: User-Agent beeinflusst die Blockade."
-
-          if [[ ! "$POST_AUTH_STATUS" =~ ^2[0-9][0-9]$ && ! "$POST_BROWSER_STATUS" =~ ^2[0-9][0-9]$ ]]; then
-            echo "FEHLER: Authentifizierte POST-Varianten waren nicht erfolgreich. Details siehe Diagnose oben."
-            exit 1
+          else
+            echo "(leer)"
           fi
 
-          echo "Cron-Diagnose abgeschlossen; mindestens eine authentifizierte POST-Variante war erfolgreich."
+          rm -f "$body_file"
+
+          if [ "$status" != "200" ]; then
+            echo "FEHLER: Cron-Request war nicht erfolgreich. Erwartet: HTTP 200, erhalten: ${status:-curl-error}."
+            exit 1
+          fi
