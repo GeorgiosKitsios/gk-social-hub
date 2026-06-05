@@ -1,5 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 
+interface FacebookPageResponse {
+  data?: { id: string; name: string; access_token: string }[];
+  paging?: { next?: string };
+}
+
+interface FacebookTokenResponse {
+  access_token?: string;
+}
+
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const code    = searchParams.get('code');
@@ -24,7 +33,7 @@ export async function GET(request: NextRequest) {
         code,
       })
     );
-    const tokenData = await tokenRes.json();
+    const tokenData = await tokenRes.json() as FacebookTokenResponse;
 
     if (!tokenData.access_token) {
       console.error('Token error:', tokenData);
@@ -39,8 +48,8 @@ export async function GET(request: NextRequest) {
       `https://graph.facebook.com/v19.0/me/accounts?access_token=${userToken}&limit=100`;
 
     while (nextUrl) {
-      const pagesRes  = await fetch(nextUrl);
-      const pagesData = await pagesRes.json();
+      const pagesRes: Response = await fetch(nextUrl);
+      const pagesData = await pagesRes.json() as FacebookPageResponse;
 
       if (pagesData.data) {
         allPages = [...allPages, ...pagesData.data];

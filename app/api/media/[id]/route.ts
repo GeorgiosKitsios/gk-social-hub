@@ -3,8 +3,9 @@ import { supabase } from '@/lib/supabase';
 
 export async function DELETE(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await params;
   const { storagePath } = await req.json();
 
   await supabase.storage.from('media').remove([storagePath]);
@@ -12,7 +13,7 @@ export async function DELETE(
   const { error } = await supabase
     .from('media_items')
     .delete()
-    .eq('id', params.id);
+    .eq('id', id);
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ success: true });
