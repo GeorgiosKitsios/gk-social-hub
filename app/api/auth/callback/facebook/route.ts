@@ -24,7 +24,7 @@ export async function GET(request: NextRequest) {
         code,
       })
     );
-    const tokenData = await tokenRes.json();
+    const tokenData: { access_token?: string; [key: string]: unknown } = await tokenRes.json();
 
     if (!tokenData.access_token) {
       console.error('Token error:', tokenData);
@@ -39,8 +39,8 @@ export async function GET(request: NextRequest) {
       `https://graph.facebook.com/v19.0/me/accounts?access_token=${userToken}&limit=100`;
 
     while (nextUrl) {
-      const pagesRes  = await fetch(nextUrl);
-      const pagesData = await pagesRes.json();
+      const pagesRes: Response = await fetch(nextUrl);
+      const pagesData: { data?: { id: string; name: string; access_token: string }[]; paging?: { next?: string } } = await pagesRes.json();
 
       if (pagesData.data) {
         allPages = [...allPages, ...pagesData.data];

@@ -39,6 +39,52 @@ const TEMPLATE_TABS: { value: TemplateType; label: string }[] = [
   { value: 'cta',         label: 'CTAs'     },
 ];
 
+const FACEBOOK_PAGES_STORAGE_KEY = 'gk-facebook-pages';
+
+interface StoredFacebookPage {
+  id:            string;
+  name:          string;
+  access_token:  string;
+  brand_id?:     string;
+}
+
+function loadFacebookPagesForSync(brandId: string): StoredFacebookPage[] {
+  if (typeof window === 'undefined') return [];
+
+  try {
+    const raw = window.localStorage.getItem(FACEBOOK_PAGES_STORAGE_KEY);
+    const pages = raw ? JSON.parse(raw) : [];
+    if (!Array.isArray(pages)) return [];
+
+    return pages
+      .filter((page): page is StoredFacebookPage =>
+        typeof page?.id === 'string' &&
+        typeof page?.name === 'string' &&
+        typeof page?.access_token === 'string'
+      )
+      .map(page => ({
+        ...page,
+        brand_id: page.brand_id ?? brandId,
+      }));
+  } catch (e) {
+    console.error('[PostEditor] Facebook-Pages konnten nicht geladen werden:', e);
+    return [];
+  }
+}
+
+function validateScheduledPost(post: Post): string | null {
+  if (post.status !== 'scheduled') return 'Post-Status muss „scheduled“ sein.';
+  if (!post.brandId) return 'Keine aktive Marke gefunden.';
+  if (!post.mainText.trim()) return 'Post-Text darf nicht leer sein.';
+  if (!post.platforms.includes('facebook')) return 'Facebook muss als Plattform ausgewählt sein.';
+  if (!post.scheduledAt) return 'Bitte ein geplantes Datum auswählen.';
+
+  const scheduled = new Date(post.scheduledAt);
+  if (Number.isNaN(scheduled.getTime())) return 'Geplante Zeit ist ungültig.';
+
+  return null;
+}
+
 function emptyForm(brandId: string): Omit<Post, 'id' | 'createdAt' | 'updatedAt'> {
   return {
     brandId,
@@ -175,6 +221,9 @@ export default function PostEditor({ postId, presetDate }: Props) {
   const [scheduledDate, setDate]  = useState('');
   const [scheduledTime, setTime]  = useState('09:00');
   const [saved, setSaved]         = useState(false);
+  const [syncMessage, setSyncMessage] = useState<string | null>(null);
+  const [syncError, setSyncError] = useState<string | null>(null);
+  const [isSyncing, setIsSyncing] = useState(false);
   const [confirmDelete, setConfirm] = useState(false);
   const [templateTab, setTemplateTab]     = useState<TemplateType>('footer');
   const [templateOpen, setTemplateOpen]   = useState(false);
@@ -234,18 +283,99 @@ export default function PostEditor({ postId, presetDate }: Props) {
 
   function buildScheduledAt() {
     if (!scheduledDate) return undefined;
-    return new Date(`${scheduledDate}T${scheduledTime}`).toISOString();
+    const scheduled = new Date(`${scheduledDate}T${scheduledTime}`);
+    return Number.isNaN(scheduled.getTime()) ? undefined : scheduled.toISOString();
   }
 
-  function handleSave(newStatus?: PostStatus) {
-    const payload = { ...form, brandId, status: newStatus ?? form.status, scheduledAt: buildScheduledAt() };
+  async function syncScheduledPost(post: Post) {
+    const validationError = validateScheduledPost(post);
+    if (validationError) throw new Error(validationError);
+
+    const facebookPages = loadFacebookPagesForSync(post.brandId);
+    const response = await fetch('/api/cron/sync', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ posts: [post], facebookPages }),
+    });
+
+    const data = await response.json().catch(() => null);
+
+    if (!response.ok || !data?.success) {
+      const message = data?.error ?? `Sync fehlgeschlagen (HTTP ${response.status}).`;
+      throw new Error(message);
+    }
+
+    if (data.postsSynced < 1) {
+      throw new Error('Sync fehlgeschlagen: Der Post wurde nicht in Supabase gespeichert.');
+    }
+
+    return data as { postsSynced: number; pagesSynced: number };
+  }
+
+  async function handleSave(newStatus?: PostStatus) {
+    setSyncError(null);
+    setSyncMessage(null);
+
+    const nextStatus = newStatus ?? form.status;
+    const scheduledAt = buildScheduledAt();
+    const nextPlatforms: Platform[] = nextStatus === 'scheduled' && !form.platforms.includes('facebook')
+      ? ['facebook', ...form.platforms]
+      : form.platforms;
+
+    const payload: Omit<Post, 'id' | 'createdAt' | 'updatedAt'> = {
+      ...form,
+      brandId,
+      status: nextStatus,
+      scheduledAt,
+      platforms: nextPlatforms,
+    };
+
+    const now = new Date().toISOString();
+    const savedPost: Post = isNew
+      ? { ...payload, id: '', createdAt: now, updatedAt: now }
+      : { ...(getPostById(postId!) ?? { ...payload, id: postId!, createdAt: now, updatedAt: now }), ...payload, updatedAt: now };
+
+    if (nextStatus === 'scheduled') {
+      const validationError = validateScheduledPost(savedPost);
+      if (validationError) {
+        setSyncError(`Planung nicht möglich: ${validationError}`);
+        setSaved(false);
+        return;
+      }
+    }
+
     if (isNew) {
       const id = addPost(payload);
-      setSaved(true);
-      setTimeout(() => router.push(`/posts/${id}`), 600);
+      savedPost.id = id;
     } else {
       updatePost(postId!, payload);
-      setSaved(true);
+    }
+
+    setSaved(true);
+
+    if (nextStatus === 'scheduled') {
+      setIsSyncing(true);
+      try {
+        const result = await syncScheduledPost(savedPost);
+        setSyncMessage(`✓ Post nach Supabase synchronisiert (${result.postsSynced} Post, ${result.pagesSynced} Facebook-Pages).`);
+        if (isNew) {
+          setTimeout(() => router.push(`/posts/${savedPost.id}`), 900);
+        } else {
+          setTimeout(() => setSaved(false), 1500);
+        }
+      } catch (e) {
+        const message = e instanceof Error ? e.message : 'Unbekannter Sync-Fehler.';
+        setSyncError(`Supabase-Sync fehlgeschlagen: ${message}`);
+        setSaved(false);
+      } finally {
+        setIsSyncing(false);
+      }
+      return;
+    }
+
+    if (isNew) {
+      setTimeout(() => router.push(`/posts/${savedPost.id}`), 600);
+    } else {
       setTimeout(() => setSaved(false), 1500);
     }
   }
@@ -310,10 +440,22 @@ export default function PostEditor({ postId, presetDate }: Props) {
         <button onClick={handleSimulate} className="text-xs px-3 py-1.5 rounded-md border border-blue-600 text-blue-400 hover:bg-blue-600 hover:text-white transition-colors">
           ▸ Simulieren
         </button>
-        <button onClick={() => handleSave('scheduled')} className="text-xs px-4 py-1.5 rounded-md bg-blue-600 hover:bg-blue-500 text-white font-medium transition-colors">
-          Planen →
+        <button onClick={() => handleSave('scheduled')} disabled={isSyncing} className="text-xs px-4 py-1.5 rounded-md bg-blue-600 hover:bg-blue-500 disabled:bg-blue-900 disabled:text-blue-200 text-white font-medium transition-colors">
+          {isSyncing ? 'Plane …' : 'Planen →'}
         </button>
       </div>
+
+      {(syncError || syncMessage || isSyncing) && (
+        <div className="px-4 py-2 border-b border-neutral-800 bg-neutral-950 shrink-0">
+          <div className={`text-sm px-3 py-2 rounded-lg border ${
+            syncError
+              ? 'bg-red-500/10 text-red-400 border-red-500/20'
+              : 'bg-green-500/10 text-green-400 border-green-500/20'
+          }`}>
+            {isSyncing ? 'Synchronisiere geplanten Post mit Supabase …' : (syncError ?? syncMessage)}
+          </div>
+        </div>
+      )}
 
       {/* Facebook Button */}
       {form.platforms.includes('facebook') && (
