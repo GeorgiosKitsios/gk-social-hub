@@ -323,9 +323,10 @@ export default function FacebookPublishButton({ message, mediaIds = [], validati
             className="text-xs px-3 py-2 rounded-md border border-neutral-700 text-neutral-300 hover:text-white hover:border-blue-500 transition-colors text-left disabled:opacity-40">
             📹 Feed-Video (normaler Post)
           </button>
-          <div className="text-xs px-3 py-2 rounded-md border border-neutral-800 text-neutral-600 cursor-not-allowed">
-            🎬 Reel – folgt mit Instagram-Anbindung
-          </div>
+          <button onClick={() => publishSelected('video_reel')} disabled={loading || !canPublish}
+            className="text-xs px-3 py-2 rounded-md border border-neutral-700 text-neutral-300 hover:text-white hover:border-purple-500 transition-colors text-left disabled:opacity-40">
+            🎬 Reel (Facebook)
+          </button>
         </div>
       )}
     </div>

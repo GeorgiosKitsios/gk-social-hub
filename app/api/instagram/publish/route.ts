@@ -2,6 +2,16 @@ import { NextRequest, NextResponse } from 'next/server';
 
 const IG_API = 'https://graph.facebook.com/v19.0';
 
+/**
+ * Fügt einer Cloudinary-Video-URL die Transformation f_mp4,vc_h264 hinzu,
+ * damit Instagram ein H.264-MP4 bekommt – auch bei HEVC/H.265-Quellvideos
+ * (z. B. von iPhones). Nicht-Cloudinary-URLs werden unverändert zurückgegeben.
+ */
+function toH264Url(url: string): string {
+  if (!url.includes('res.cloudinary.com') || !url.includes('/video/upload/')) return url;
+  return url.replace('/video/upload/', '/video/upload/f_mp4,vc_h264/');
+}
+
 export async function POST(req: NextRequest) {
   console.log('[IG] ── POST /api/instagram/publish gestartet ──');
 
@@ -65,7 +75,8 @@ export async function POST(req: NextRequest) {
     containerBody.image_url = imageUrl;
     if (postType === 'story') containerBody.media_type = 'STORIES';
   } else if (videoUrl) {
-    containerBody.video_url  = videoUrl;
+    // H.264-Transformation einbauen: Instagram lehnt HEVC/H.265 ab.
+    containerBody.video_url  = toH264Url(videoUrl);
     containerBody.media_type = postType === 'story' ? 'STORIES' : 'REELS';
   }
 
