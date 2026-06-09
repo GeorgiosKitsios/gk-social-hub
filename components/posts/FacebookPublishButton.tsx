@@ -48,9 +48,11 @@ function isPermissionError(err?: string): boolean {
 }
 
 type PostVariant = 'text' | 'image' | 'video_feed' | 'video_reel';
+type PostMode    = 'feed' | 'story';
 
 export default function FacebookPublishButton({ message, mediaIds = [], validationErrors, onSuccess, onError }: Props) {
   const [loading,        setLoading]        = useState(false);
+  const [postMode,       setPostMode]       = useState<PostMode>('feed');
   const [showTypePicker, setShowTypePicker] = useState(false);
   const [results,        setResults]        = useState<{ page: string; success: boolean; error?: string }[]>([]);
 
@@ -75,8 +77,12 @@ export default function FacebookPublishButton({ message, mediaIds = [], validati
     ? ['Keine Facebook-Seite verbunden.']
     : selectedPages.length === 0
     ? ['Keine Seite ausgewählt.']
+    : postMode === 'story' && !imageBase64 && !videoBase64
+    ? ['Facebook-Stories benötigen mindestens ein Bild oder Video.']
     : [];
-  const allErrors  = [...internalErrors, ...(validationErrors ?? [])];
+  // Caption-Validierung ist für Stories irrelevant
+  const externalErrors = postMode === 'story' ? [] : (validationErrors ?? []);
+  const allErrors  = [...internalErrors, ...externalErrors];
   const canPublish = allErrors.length === 0;
 
   const hasPermissionError = results.some(r => !r.success && isPermissionError(r.error));
@@ -94,6 +100,33 @@ export default function FacebookPublishButton({ message, mediaIds = [], validati
   async function publishToPage(page: FacebookPage, variant: PostVariant) {
     setLoading(true);
     try {
+      // Story-Modus: eigene Route, kein Text, Medien erforderlich
+      if (postMode === 'story') {
+        const body: Record<string, unknown> = {
+          pageId:    page.id,
+          pageToken: page.access_token,
+        };
+        if (imageBase64) body.imageBase64 = imageBase64;
+        if (videoBase64) body.videoBase64 = videoBase64;
+
+        const res  = await fetch('/api/facebook/story', {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify(body),
+        });
+        const data = await res.json();
+
+        if (data.success) {
+          setResults(r => [...r, { page: page.name, success: true }]);
+          onSuccess?.(data.postId, page.name);
+        } else {
+          setResults(r => [...r, { page: page.name, success: false, error: data.error }]);
+          onError?.(data.error);
+        }
+        return;
+      }
+
+      // Feed-Modus (unverändert)
       let endpoint = '/api/facebook/upload';
       const body: Record<string, unknown> = {
         pageId:    page.id,
@@ -149,6 +182,28 @@ export default function FacebookPublishButton({ message, mediaIds = [], validati
           <span>{isVideo ? '🎬' : '🖼'}</span>
           <span>{isVideo ? 'Video wird mitgepostet' : 'Bild wird mitgepostet'}</span>
         </div>
+      )}
+
+      {/* Feed / Story Umschalter */}
+      {pages.length > 0 && (
+        <div className="flex gap-1 bg-neutral-900 rounded-lg p-0.5 border border-neutral-700">
+          {(['feed', 'story'] as PostMode[]).map(m => (
+            <button
+              key={m}
+              onClick={() => { setPostMode(m); setShowTypePicker(false); setResults([]); }}
+              disabled={loading}
+              className={`flex-1 text-xs py-1.5 rounded-md transition-colors ${
+                postMode === m ? 'bg-neutral-700 text-white' : 'text-neutral-400 hover:text-white'
+              }`}>
+              {m === 'feed' ? '📰 Feed-Post' : '⊕ Story'}
+            </button>
+          ))}
+        </div>
+      )}
+      {postMode === 'story' && (
+        <p className="text-[11px] text-neutral-500">
+          Story: nur Bild/Video, kein Text (Facebook zeigt keinen Caption-Text in Stories an).
+        </p>
       )}
 
       {/* Page-Auswahl per Checkbox */}
@@ -220,7 +275,13 @@ export default function FacebookPublishButton({ message, mediaIds = [], validati
       {/* Buttons */}
       <div className="flex gap-2 flex-wrap">
         <button
-          onClick={() => isVideo ? setShowTypePicker(o => !o) : publishSelected(getDefaultVariant())}
+          onClick={() => {
+            if (postMode === 'story') {
+              publishSelected(getDefaultVariant());
+            } else {
+              isVideo ? setShowTypePicker(o => !o) : publishSelected(getDefaultVariant());
+            }
+          }}
           disabled={loading || !canPublish}
           className={`flex-1 text-xs py-2 rounded-lg font-medium transition-colors disabled:opacity-50 flex items-center justify-center gap-1.5 text-white ${
             canPublish && !loading ? 'bg-green-600 hover:bg-green-500' : 'bg-neutral-700'
@@ -228,6 +289,8 @@ export default function FacebookPublishButton({ message, mediaIds = [], validati
         >
           {loading
             ? <><div className="w-3 h-3 border border-white border-t-transparent rounded-full animate-spin" /> Wird gepostet...</>
+            : postMode === 'story'
+            ? <>⊕ Story auf {selectedPages.length} {selectedPages.length === 1 ? 'Seite' : 'Seiten'}</>
             : isVideo
             ? <>🎬 Video posten ({selectedPages.length}) ▾</>
             : <>📘 Auf {selectedPages.length} {selectedPages.length === 1 ? 'Seite' : 'Seiten'} posten</>
@@ -252,8 +315,8 @@ export default function FacebookPublishButton({ message, mediaIds = [], validati
         </div>
       )}
 
-      {/* Video-Typ-Picker */}
-      {isVideo && showTypePicker && (
+      {/* Video-Typ-Picker – nur im Feed-Modus */}
+      {isVideo && showTypePicker && postMode === 'feed' && (
         <div className="flex flex-col gap-2 p-3 bg-neutral-900 rounded-lg border border-neutral-700">
           <p className="text-xs text-neutral-400 font-medium mb-1">Als was posten?</p>
           <button onClick={() => publishSelected('video_feed')} disabled={loading || !canPublish}
