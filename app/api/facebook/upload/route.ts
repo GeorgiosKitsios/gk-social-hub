@@ -23,11 +23,23 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: true, postId: data.id });
     }
 
-    // Bild als Blob konvertieren
-    const base64Data = imageBase64.replace(/^data:image\/\w+;base64,/, '');
-    const buffer     = Buffer.from(base64Data, 'base64');
-    const mimeMatch  = imageBase64.match(/^data:(image\/\w+);base64,/);
-    const mimeType   = mimeMatch ? mimeMatch[1] : 'image/jpeg';
+    // Bilddaten beschaffen – entweder von öffentlicher URL (Cloudinary)
+    // oder aus einer base64-Data-URL (Fallback für Altdaten).
+    let buffer:   Uint8Array<ArrayBuffer>;
+    let mimeType: string;
+    if (/^https?:\/\//.test(imageBase64)) {
+      const imgRes = await fetch(imageBase64);
+      if (!imgRes.ok) {
+        return NextResponse.json({ error: `Bild konnte nicht geladen werden (HTTP ${imgRes.status})` }, { status: 400 });
+      }
+      buffer   = new Uint8Array(await imgRes.arrayBuffer());
+      mimeType = imgRes.headers.get('content-type') ?? 'image/jpeg';
+    } else {
+      const base64Data = imageBase64.replace(/^data:image\/\w+;base64,/, '');
+      buffer           = Uint8Array.from(Buffer.from(base64Data, 'base64'));
+      const mimeMatch  = imageBase64.match(/^data:(image\/\w+);base64,/);
+      mimeType         = mimeMatch ? mimeMatch[1] : 'image/jpeg';
+    }
 
     // Bild direkt als Blob zu Facebook hochladen
     const formData = new FormData();

@@ -8,12 +8,24 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'pageId, pageToken und videoBase64 erforderlich' }, { status: 400 });
     }
 
-    // Base64 → Buffer
-    const base64Data = videoBase64.replace(/^data:video\/\w+;base64,/, '');
-    const buffer     = Buffer.from(base64Data, 'base64');
-    const mimeMatch  = videoBase64.match(/^data:(video\/\w+);base64,/);
-    const mimeType   = mimeMatch ? mimeMatch[1] : 'video/mp4';
-    const isReel     = postType === 'reels';
+    // Videodaten beschaffen – entweder von öffentlicher URL (Cloudinary)
+    // oder aus einer base64-Data-URL (Fallback für Altdaten).
+    let buffer:   Uint8Array<ArrayBuffer>;
+    let mimeType: string;
+    if (/^https?:\/\//.test(videoBase64)) {
+      const vidRes = await fetch(videoBase64);
+      if (!vidRes.ok) {
+        return NextResponse.json({ error: `Video konnte nicht geladen werden (HTTP ${vidRes.status})` }, { status: 400 });
+      }
+      buffer   = new Uint8Array(await vidRes.arrayBuffer());
+      mimeType = vidRes.headers.get('content-type') ?? 'video/mp4';
+    } else {
+      const base64Data = videoBase64.replace(/^data:video\/\w+;base64,/, '');
+      buffer           = Uint8Array.from(Buffer.from(base64Data, 'base64'));
+      const mimeMatch  = videoBase64.match(/^data:(video\/\w+);base64,/);
+      mimeType         = mimeMatch ? mimeMatch[1] : 'video/mp4';
+    }
+    const isReel = postType === 'reels';
 
     if (isReel) {
       // ── Reels: 3-stufiger Prozess ──

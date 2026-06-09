@@ -1,5 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
+import type { UploadApiResponse, UploadApiOptions } from 'cloudinary';
 import { hasSupabaseAdminConfig, supabaseAdmin } from '@/lib/supabase';
+import { cloudinary, hasCloudinaryConfig } from '@/lib/cloudinary';
+
+/** Buffer per Upload-Stream zu Cloudinary hochladen (Bild oder Video). */
+function uploadToCloudinary(buffer: Buffer, options: UploadApiOptions): Promise<UploadApiResponse> {
+  return new Promise((resolve, reject) => {
+    const stream = cloudinary.uploader.upload_stream(options, (error, result) => {
+      if (error || !result) reject(error ?? new Error('Cloudinary lieferte kein Ergebnis.'));
+      else resolve(result);
+    });
+    stream.end(buffer);
+  });
+}
 
 export async function POST(req: NextRequest) {
   console.log('[upload] ── POST /api/media/upload gestartet ──');
@@ -33,66 +46,59 @@ export async function POST(req: NextRequest) {
   }
 
   // ── Schritt 2: Env-Variablen prüfen ─────────────────────────
-  const supabaseUrl    = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  console.log('[upload] Schritt 2 – Env-Variablen:', {
-    SUPABASE_URL_set:     !!supabaseUrl,
-    SERVICE_ROLE_KEY_set: !!serviceRoleKey,
-    SUPABASE_URL_prefix:  supabaseUrl?.slice(0, 30) ?? '(fehlt)',
+  console.log('[upload] Schritt 2 – Config-Check:', {
+    cloudinary_set: hasCloudinaryConfig(),
+    supabase_set:   hasSupabaseAdminConfig(),
   });
-  if (!supabaseUrl) {
-    console.error('[upload] Schritt 2 FEHLER – NEXT_PUBLIC_SUPABASE_URL fehlt!');
+  if (!hasCloudinaryConfig()) {
+    console.error('[upload] Schritt 2 FEHLER – Cloudinary-Env fehlt!');
     return NextResponse.json({
-      step: 'env', error: 'NEXT_PUBLIC_SUPABASE_URL fehlt. In Hostinger Env-Variablen setzen.',
+      step:  'env',
+      error: 'Cloudinary ist nicht konfiguriert. Bitte CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY und CLOUDINARY_API_SECRET in den Env-Variablen setzen.',
     }, { status: 500 });
   }
-  if (!serviceRoleKey || !hasSupabaseAdminConfig()) {
+  if (!hasSupabaseAdminConfig()) {
     console.error('[upload] Schritt 2 FEHLER – SUPABASE_SERVICE_ROLE_KEY fehlt!');
     return NextResponse.json({
-      step: 'env',
-      error: 'SUPABASE_SERVICE_ROLE_KEY fehlt. Server-Uploads und DB-Inserts benötigen den Service Role Key, damit RLS nicht blockiert.',
+      step:  'env',
+      error: 'SUPABASE_SERVICE_ROLE_KEY fehlt. Die Medien-Metadaten werden in Supabase (media_items) gespeichert.',
     }, { status: 500 });
   }
 
-  // ── Schritt 3: Datei direkt in Supabase Storage hochladen ────
-  const ext         = file?.name ? file.name.split('.').pop()?.toLowerCase() ?? 'jpg' : 'jpg';
-  const storagePath = `${brandId}/${crypto.randomUUID()}.${ext}`;
-  console.log('[upload] Schritt 3 – Storage Upload:', { path: storagePath, type: file.type, size: file.size });
+  // ── Schritt 3: Datei zu Cloudinary hochladen ─────────────────
+  const isVideo = file.type.startsWith('video');
+  let upload: UploadApiResponse;
+  try {
+    const buffer = Buffer.from(await file.arrayBuffer());
+    console.log('[upload] Schritt 3 – Cloudinary Upload:', { folder: `gk-social-hub/${brandId}`, type: file.type, size: file.size });
 
-  const { error: uploadError } = await supabaseAdmin.storage
-    .from('media')
-    .upload(storagePath, file, { contentType: file.type });
-
-  if (uploadError) {
-    console.error('[upload] Schritt 3 FEHLER – Storage Upload:', {
-      message:    uploadError.message,
-      statusCode: (uploadError as { statusCode?: string }).statusCode,
+    upload = await uploadToCloudinary(buffer, {
+      folder:        `gk-social-hub/${brandId}`,
+      resource_type: 'auto', // Bild oder Video automatisch erkennen
     });
+    console.log('[upload] Schritt 3 OK – Cloudinary:', { public_id: upload.public_id, url: upload.secure_url });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error('[upload] Schritt 3 FEHLER – Cloudinary Upload:', msg);
     return NextResponse.json({
-      step:       'storage_upload',
-      error:      uploadError.message,
-      statusCode: (uploadError as { statusCode?: string }).statusCode,
-      hint:       'Prüfe ob der Bucket "media" in Supabase existiert und öffentlich ist.',
+      step:  'cloudinary_upload',
+      error: msg,
+      hint:  'Prüfe die Cloudinary-Credentials und das Upload-Limit deines Accounts.',
     }, { status: 500 });
   }
-  console.log('[upload] Schritt 3 OK – Datei hochgeladen:', storagePath);
 
-  // ── Schritt 4: Öffentliche URL ───────────────────────────────
-  const { data: { publicUrl } } = supabaseAdmin.storage.from('media').getPublicUrl(storagePath);
-  console.log('[upload] Schritt 4 – Public URL:', publicUrl);
-
-  // ── Schritt 5: Datenbank-Insert ──────────────────────────────
+  // ── Schritt 4: Datenbank-Insert (Metadaten + Cloudinary-URL) ─
   const insertPayload = {
     brand_id:     brandId,
     file_name:    file.name,
-    file_url:     publicUrl,
-    storage_path: storagePath,
-    media_type:   file.type.startsWith('video') ? 'video' : 'image',
+    file_url:     upload.secure_url,  // öffentliche HTTPS-URL von Cloudinary
+    storage_path: upload.public_id,   // Cloudinary public_id (zum Löschen)
+    media_type:   isVideo ? 'video' : 'image',
     mime_type:    file.type,
     size_bytes:   file.size,
     tags,
   };
-  console.log('[upload] Schritt 5 – DB Insert:', insertPayload);
+  console.log('[upload] Schritt 4 – DB Insert:', insertPayload);
 
   const { data, error: dbError } = await supabaseAdmin
     .from('media_items')
@@ -101,10 +107,18 @@ export async function POST(req: NextRequest) {
     .single();
 
   if (dbError) {
-    console.error('[upload] Schritt 5 FEHLER – DB Insert:', {
+    console.error('[upload] Schritt 4 FEHLER – DB Insert:', {
       message: dbError.message, code: dbError.code,
       details: dbError.details, hint: dbError.hint,
     });
+    // Verwaiste Cloudinary-Datei wieder entfernen, damit nichts hängen bleibt.
+    try {
+      await cloudinary.uploader.destroy(upload.public_id, {
+        resource_type: isVideo ? 'video' : 'image',
+      });
+    } catch (cleanupErr) {
+      console.warn('[upload] Cleanup der Cloudinary-Datei fehlgeschlagen:', cleanupErr);
+    }
     return NextResponse.json({
       step:    'db_insert',
       error:   dbError.message,
@@ -113,10 +127,10 @@ export async function POST(req: NextRequest) {
       hint:    dbError.hint ?? 'Prüfe ob die Tabelle "media_items" existiert und alle Spalten stimmen.',
     }, { status: 500 });
   }
-  console.log('[upload] Schritt 5 OK – DB-Eintrag:', data.id);
+  console.log('[upload] Schritt 4 OK – DB-Eintrag:', data.id);
 
-  // ── Schritt 6: Erfolg – camelCase zurückgeben ────────────────
-  const mediaType = (data.media_type ?? 'image') as 'image' | 'video';
+  // ── Schritt 5: Erfolg – camelCase zurückgeben ────────────────
+  const mediaType = (data.media_type ?? (isVideo ? 'video' : 'image')) as 'image' | 'video';
   const createdAt = data.created_at ?? new Date().toISOString();
   const result = {
     id:           data.id,
@@ -135,7 +149,7 @@ export async function POST(req: NextRequest) {
     url:          data.file_url,
     thumbnailUrl: data.file_url,
     sizeBytes:    data.size_bytes ?? file.size,
-    storagePath:  data.storage_path ?? storagePath,
+    storagePath:  data.storage_path ?? upload.public_id,
   };
   console.log('[upload] ── Erfolgreich abgeschlossen ──', result.id);
   return NextResponse.json(result);
