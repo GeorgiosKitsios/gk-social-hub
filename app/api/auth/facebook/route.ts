@@ -7,7 +7,7 @@ export async function GET() {
   const params = new URLSearchParams({
     client_id:     appId!,
     redirect_uri:  redirectUri,
-    scope:         'pages_show_list,pages_read_engagement,pages_manage_posts,public_profile',
+    scope:         'pages_show_list,pages_read_engagement,pages_manage_posts,instagram_basic,instagram_content_publish,public_profile',
     response_type: 'code',
   });
 

@@ -18,6 +18,8 @@ interface Props {
   onError?:          (error: string) => void;
 }
 
+type PostType = 'feed' | 'story';
+
 function loadAccounts(): InstagramAccount[] {
   try {
     const raw = localStorage.getItem('gk-instagram-accounts');
@@ -26,60 +28,54 @@ function loadAccounts(): InstagramAccount[] {
 }
 
 export default function InstagramPublishButton({ message, mediaIds = [], validationErrors, onSuccess, onError }: Props) {
-  const [loading,    setLoading]    = useState(false);
-  const [showPicker, setShowPicker] = useState(false);
-  const [results,    setResults]    = useState<{ account: string; success: boolean; error?: string }[]>([]);
+  const [loading,  setLoading]  = useState(false);
+  const [postType, setPostType] = useState<PostType>('feed');
+  const [results,  setResults]  = useState<{ account: string; success: boolean; error?: string }[]>([]);
 
   const { getById }  = useMediaStore();
   const accounts     = loadAccounts();
+
+  // Auswahl-State: accountId → angehakt. Standardmäßig alle.
+  const [selected, setSelected] = useState<Record<string, boolean>>(() => {
+    const init: Record<string, boolean> = {};
+    for (const a of loadAccounts()) init[a.id] = true;
+    return init;
+  });
 
   const firstMedia = mediaIds.length > 0 ? getById(mediaIds[0]) : null;
   const imageUrl   = firstMedia?.type === 'image' ? firstMedia.url  : undefined;
   const videoUrl   = firstMedia?.type === 'video' ? firstMedia.url  : undefined;
   const hasMedia   = !!imageUrl || !!videoUrl;
 
-  // Client-Diagnose beim Mount
-  if (typeof window !== 'undefined') {
-    console.log('[IG Button] Diagnose:', {
-      mediaIds,
-      firstMedia:       firstMedia ? { id: firstMedia.id, type: firstMedia.type, url: firstMedia.url?.slice(0, 60) } : null,
-      imageUrl_type:    imageUrl?.startsWith('data:')  ? 'BASE64 ⚠️' :
-                        imageUrl?.startsWith('https:') ? 'HTTPS ✓'   :
-                        imageUrl ? 'andere' : '(kein)',
-      videoUrl_set:     !!videoUrl,
-      hasMedia,
-      accounts_count:   accounts.length,
-      accounts:         accounts.map(a => ({ name: a.name, accountId: a.accountId, token_set: !!a.accessToken })),
-    });
-  }
+  const selectedAccounts = accounts.filter(a => selected[a.id]);
 
   // Interne Validierung
   const internalErrors: string[] = [];
-  if (accounts.length === 0) internalErrors.push('Kein Instagram-Account verbunden.');
-  if (!hasMedia)              internalErrors.push('Instagram benötigt mindestens ein Bild oder Video.');
+  if (accounts.length === 0)          internalErrors.push('Kein Instagram-Account verbunden.');
+  if (!hasMedia)                      internalErrors.push('Instagram benötigt mindestens ein Bild oder Video.');
+  if (accounts.length > 0 && selectedAccounts.length === 0)
+                                      internalErrors.push('Kein Account ausgewählt.');
+  if (imageUrl?.startsWith('data:'))  internalErrors.push('Bild muss als öffentliche HTTPS-URL vorliegen (zuerst in die Medienbibliothek hochladen).');
 
-  const allErrors  = [...internalErrors, ...(validationErrors ?? [])];
+  // Caption-Validierungsfehler (leerer Text) sind für Stories irrelevant.
+  const externalErrors = postType === 'story' ? [] : (validationErrors ?? []);
+  const allErrors  = [...internalErrors, ...externalErrors];
   const canPublish = allErrors.length === 0;
+
+  function toggle(accId: string) {
+    setSelected(s => ({ ...s, [accId]: !s[accId] }));
+  }
 
   async function publishToAccount(account: InstagramAccount) {
     setLoading(true);
-    console.log('[IG Button] publishToAccount gestartet:', {
-      accountName: account.name,
-      accountId:   account.accountId,
-      token_set:   !!account.accessToken,
-      token_prefix: account.accessToken ? account.accessToken.slice(0, 8) + '…' : '(fehlt)',
-      imageUrl_type: imageUrl?.startsWith('data:')  ? 'BASE64 ⚠️ Instagram braucht HTTPS!' :
-                     imageUrl?.startsWith('https:') ? 'HTTPS ✓' : imageUrl ? 'andere' : '(kein)',
-      hasImage:    !!imageUrl,
-      hasVideo:    !!videoUrl,
-    });
     try {
       const payload = {
         accountId:   account.accountId,
         accessToken: account.accessToken,
-        caption:     message,
+        caption:     postType === 'story' ? '' : message,
         imageUrl,
         videoUrl,
+        postType,
       };
       const res  = await fetch('/api/instagram/publish', {
         method:  'POST',
@@ -87,7 +83,6 @@ export default function InstagramPublishButton({ message, mediaIds = [], validat
         body:    JSON.stringify(payload),
       });
       const data = await res.json();
-      console.log('[IG Button] Server-Antwort:', { httpStatus: res.status, data });
 
       if (data.success) {
         setResults(r => [...r, { account: account.name, success: true }]);
@@ -98,7 +93,6 @@ export default function InstagramPublishButton({ message, mediaIds = [], validat
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Fehler';
-      console.error('[IG Button] Netzwerkfehler:', err);
       setResults(r => [...r, { account: account.name, success: false, error: msg }]);
       onError?.(msg);
     } finally {
@@ -106,10 +100,9 @@ export default function InstagramPublishButton({ message, mediaIds = [], validat
     }
   }
 
-  async function publishAll() {
+  async function publishSelected() {
     setResults([]);
-    setShowPicker(false);
-    for (const account of accounts) {
+    for (const account of selectedAccounts) {
       await publishToAccount(account);
     }
   }
@@ -121,7 +114,66 @@ export default function InstagramPublishButton({ message, mediaIds = [], validat
       {firstMedia && (
         <div className="text-xs text-neutral-500 flex items-center gap-1.5">
           <span>{videoUrl ? '🎬' : '🖼'}</span>
-          <span>{videoUrl ? 'Video wird mitgepostet' : 'Bild wird mitgepostet'}</span>
+          <span>{videoUrl ? 'Video wird gepostet' : 'Bild wird gepostet'}</span>
+        </div>
+      )}
+
+      {/* Feed / Story Umschalter */}
+      {accounts.length > 0 && (
+        <div className="flex gap-1 bg-neutral-900 rounded-lg p-0.5 border border-neutral-700">
+          {(['feed', 'story'] as PostType[]).map(t => (
+            <button
+              key={t}
+              onClick={() => setPostType(t)}
+              disabled={loading}
+              className={`flex-1 text-xs py-1.5 rounded-md transition-colors ${
+                postType === t ? 'bg-neutral-700 text-white' : 'text-neutral-400 hover:text-white'
+              }`}>
+              {t === 'feed' ? '🖼 Feed-Post' : '⊕ Story'}
+            </button>
+          ))}
+        </div>
+      )}
+      {postType === 'story' && (
+        <p className="text-[11px] text-neutral-500">
+          Story: nur Bild/Video, ohne Bildunterschrift (Instagram unterstützt keinen Caption-Text für Stories).
+        </p>
+      )}
+
+      {/* Account-Auswahl per Checkbox */}
+      {accounts.length > 0 && (
+        <div className="flex flex-col gap-1 p-2 bg-neutral-900 rounded-lg border border-neutral-700">
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-xs text-neutral-400 font-medium">Accounts auswählen</span>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setSelected(Object.fromEntries(accounts.map(a => [a.id, true])))}
+                disabled={loading}
+                className="text-[11px] text-neutral-500 hover:text-white transition-colors">
+                Alle
+              </button>
+              <button
+                onClick={() => setSelected(Object.fromEntries(accounts.map(a => [a.id, false])))}
+                disabled={loading}
+                className="text-[11px] text-neutral-500 hover:text-white transition-colors">
+                Keine
+              </button>
+            </div>
+          </div>
+          {accounts.map(account => (
+            <label
+              key={account.id}
+              className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-neutral-800/60 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={!!selected[account.id]}
+                onChange={() => toggle(account.id)}
+                disabled={loading}
+                className="accent-pink-600"
+              />
+              <span className="text-xs text-neutral-300">📸 {account.name}</span>
+            </label>
+          ))}
         </div>
       )}
 
@@ -139,32 +191,23 @@ export default function InstagramPublishButton({ message, mediaIds = [], validat
         </div>
       )}
 
-      {/* Buttons */}
-      <div className="flex gap-2 flex-wrap">
-        <button
-          onClick={() => publishAll()}
-          disabled={loading || !canPublish}
-          className={`flex-1 text-xs py-2 rounded-lg font-medium transition-colors disabled:opacity-50 flex items-center justify-center gap-1.5 text-white ${
-            canPublish && !loading
-              ? 'bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500'
-              : 'bg-neutral-700'
-          }`}
-        >
-          {loading
-            ? <><div className="w-3 h-3 border border-white border-t-transparent rounded-full animate-spin" /> Wird gepostet…</>
-            : <>📸 Auf Instagram ({accounts.length}) posten</>
-          }
-        </button>
-        {accounts.length > 1 && (
-          <button
-            onClick={() => setShowPicker(o => !o)}
-            disabled={loading}
-            className="text-xs px-3 py-2 rounded-lg border border-neutral-600 text-neutral-400 hover:text-white hover:border-neutral-400 transition-colors"
-          >
-            Account ▾
-          </button>
-        )}
-      </div>
+      {/* Publish-Button */}
+      <button
+        onClick={() => publishSelected()}
+        disabled={loading || !canPublish}
+        className={`w-full text-xs py-2 rounded-lg font-medium transition-colors disabled:opacity-50 flex items-center justify-center gap-1.5 text-white ${
+          canPublish && !loading
+            ? 'bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500'
+            : 'bg-neutral-700'
+        }`}
+      >
+        {loading
+          ? <><div className="w-3 h-3 border border-white border-t-transparent rounded-full animate-spin" /> Wird gepostet…</>
+          : postType === 'story'
+          ? <>📸 Story auf {selectedAccounts.length} {selectedAccounts.length === 1 ? 'Account' : 'Accounts'}</>
+          : <>📸 Feed-Post auf {selectedAccounts.length} {selectedAccounts.length === 1 ? 'Account' : 'Accounts'}</>
+        }
+      </button>
 
       {/* Validierungsfehler */}
       {allErrors.length > 0 && (
@@ -176,24 +219,10 @@ export default function InstagramPublishButton({ message, mediaIds = [], validat
             </p>
           ))}
           {accounts.length === 0 && (
-            <a href="/admin/tokens" className="text-xs text-blue-400 hover:text-blue-300 transition-colors mt-0.5">
-              → Instagram-Token hinzufügen
+            <a href="/accounts" className="text-xs text-blue-400 hover:text-blue-300 transition-colors mt-0.5">
+              → Instagram-Account verbinden
             </a>
           )}
-        </div>
-      )}
-
-      {/* Account-Auswahl */}
-      {showPicker && (
-        <div className="flex flex-col gap-1.5 p-2 bg-neutral-900 rounded-lg border border-neutral-700">
-          {accounts.map(account => (
-            <button key={account.id}
-              onClick={() => { publishToAccount(account); setShowPicker(false); }}
-              disabled={loading || !canPublish}
-              className="text-xs px-3 py-2 rounded-md border border-neutral-700 text-neutral-300 hover:text-white hover:border-pink-500 transition-colors text-left disabled:opacity-40">
-              📸 {account.name}
-            </button>
-          ))}
         </div>
       )}
     </div>

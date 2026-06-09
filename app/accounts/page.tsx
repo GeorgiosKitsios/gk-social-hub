@@ -12,7 +12,28 @@ interface FacebookPage {
   tasks?:       string[];
 }
 
-const STORAGE_KEY = 'gk-facebook-pages';
+interface InstagramAccount {
+  id:          string;
+  name:        string;
+  accountId:   string;
+  accessToken: string;
+}
+
+const STORAGE_KEY    = 'gk-facebook-pages';
+const IG_STORAGE_KEY = 'gk-instagram-accounts';
+
+function loadIgAccounts(): InstagramAccount[] {
+  try {
+    const raw = localStorage.getItem(IG_STORAGE_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch { return []; }
+}
+
+function saveIgAccounts(accounts: InstagramAccount[]) {
+  try {
+    localStorage.setItem(IG_STORAGE_KEY, JSON.stringify(accounts));
+  } catch { /* ignore */ }
+}
 
 /** Eine Page kann nur bespielt werden, wenn der Nutzer dort CREATE_CONTENT darf.
  *  Ältere Verbindungen ohne tasks-Info gelten als unbekannt (true), damit sie
@@ -40,33 +61,52 @@ function AccountsContent() {
   const searchParams = useSearchParams();
   const active = brands.filter(b => !b.archived);
 
-  const [fbPages, setFbPages] = useState<FacebookPage[]>([]);
-  const [message, setMessage] = useState<string | null>(null);
+  const [fbPages,    setFbPages]    = useState<FacebookPage[]>([]);
+  const [igAccounts, setIgAccounts] = useState<InstagramAccount[]>([]);
+  const [message,    setMessage]    = useState<string | null>(null);
 
   useEffect(() => {
     setFbPages(loadPages());
+    setIgAccounts(loadIgAccounts());
 
     const pagesParam = searchParams.get('pages');
+    const igParam    = searchParams.get('igAccounts');
     const error      = searchParams.get('error');
 
     if (pagesParam) {
       try {
-        const newPages: FacebookPage[] = JSON.parse(decodeURIComponent(pagesParam));
-        const existing = loadPages();
-        const merged   = [...existing];
+        const newPages: FacebookPage[] = JSON.parse(pagesParam);
+        const merged = [...loadPages()];
 
         for (const p of newPages) {
           const idx = merged.findIndex(e => e.id === p.id);
-          if (idx === -1) {
-            merged.push(p);
-          } else {
-            merged[idx] = p;
-          }
+          if (idx === -1) merged.push(p);
+          else            merged[idx] = p;
         }
 
         savePages(merged);
         setFbPages(merged);
-        setMessage(`✓ ${merged.length} Facebook ${merged.length === 1 ? 'Page' : 'Pages'} verbunden`);
+
+        // Verknüpfte Instagram-Accounts (falls vorhanden) mergen – dedupliziert nach accountId.
+        let igCount = 0;
+        if (igParam) {
+          const newIg: InstagramAccount[] = JSON.parse(igParam);
+          const mergedIg = [...loadIgAccounts()];
+          for (const a of newIg) {
+            const idx = mergedIg.findIndex(e => e.accountId === a.accountId);
+            if (idx === -1) mergedIg.push(a);
+            else            mergedIg[idx] = a;
+          }
+          saveIgAccounts(mergedIg);
+          setIgAccounts(mergedIg);
+          igCount = newIg.length;
+        }
+
+        setMessage(
+          `✓ ${merged.length} Facebook ${merged.length === 1 ? 'Page' : 'Pages'}` +
+          (igCount > 0 ? ` · ${igCount} Instagram-Account${igCount === 1 ? '' : 's'}` : '') +
+          ' verbunden'
+        );
       } catch {
         setMessage('Fehler beim Laden der Pages.');
       }
@@ -89,6 +129,12 @@ function AccountsContent() {
     const updated = fbPages.filter(p => p.id !== pageId);
     savePages(updated);
     setFbPages(updated);
+  }
+
+  function disconnectIg(accountId: string) {
+    const updated = igAccounts.filter(a => a.accountId !== accountId);
+    saveIgAccounts(updated);
+    setIgAccounts(updated);
   }
 
   return (
@@ -161,6 +207,57 @@ function AccountsContent() {
         )}
       </div>
 
+      {/* Instagram-Accounts (automatisch über Facebook-Login verknüpft) */}
+      <div className="bg-neutral-800 border border-neutral-700 rounded-xl p-5 mb-6">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <div className="text-sm font-medium text-white mb-1">Instagram-Accounts</div>
+            <div className="text-xs text-neutral-400">
+              {igAccounts.length > 0
+                ? `${igAccounts.length} ${igAccounts.length === 1 ? 'Account' : 'Accounts'} verknüpft`
+                : 'Werden beim Facebook-Login automatisch verknüpft'}
+            </div>
+          </div>
+          <a
+            href="/api/auth/facebook"
+            className="text-xs px-4 py-2 rounded-lg bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white font-medium transition-colors"
+          >
+            {igAccounts.length > 0 ? '↻ Aktualisieren' : 'Via Facebook verbinden'}
+          </a>
+        </div>
+
+        {igAccounts.length > 0 ? (
+          <div className="flex flex-col gap-2">
+            {igAccounts.map(acc => (
+              <div
+                key={acc.id}
+                className="flex items-center justify-between py-2.5 px-3 bg-neutral-900 rounded-lg"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-2 h-2 rounded-full bg-pink-500" />
+                  <div>
+                    <div className="text-sm text-white">📸 {acc.name}</div>
+                    <div className="text-xs text-neutral-500">Account-ID: {acc.accountId}</div>
+                  </div>
+                </div>
+                <button
+                  onClick={() => disconnectIg(acc.accountId)}
+                  className="text-xs px-3 py-1 rounded border border-neutral-600 text-neutral-400 hover:text-red-400 hover:border-red-500 transition-colors"
+                >
+                  Trennen
+                </button>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-xs text-neutral-500">
+            Verbinde dich oben mit Facebook und gib <span className="text-neutral-300">instagram_basic</span> +{' '}
+            <span className="text-neutral-300">instagram_content_publish</span> frei. Jede Facebook-Page mit
+            verknüpftem Instagram-Business-Account erscheint dann hier automatisch.
+          </p>
+        )}
+      </div>
+
       {/* Marken-Übersicht */}
       <div className="flex flex-col gap-4">
         {active.map(brand => (
@@ -179,7 +276,8 @@ function AccountsContent() {
             <div className="flex flex-col gap-1.5">
               {brand.platforms.map(p => {
                 const label     = p === 'facebook' ? 'Facebook' : p === 'instagram' ? 'Instagram' : 'TikTok';
-                const connected = p === 'facebook' && fbPages.length > 0;
+                const connected = (p === 'facebook'  && fbPages.length > 0)
+                               || (p === 'instagram' && igAccounts.length > 0);
                 return (
                   <div key={p} className="flex items-center justify-between py-1.5 border-t border-neutral-700/50">
                     <div className="flex items-center gap-2">
@@ -192,7 +290,7 @@ function AccountsContent() {
                         {connected ? '✓ Verbunden' : '– Nicht verbunden'}
                       </span>
                     </div>
-                    {p !== 'facebook' && (
+                    {p === 'tiktok' && (
                       <span className="text-xs text-neutral-600 italic">folgt in Phase 3</span>
                     )}
                   </div>

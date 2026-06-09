@@ -7,7 +7,8 @@ export async function POST(req: NextRequest) {
 
   // ── Schritt 1: Request lesen ─────────────────────────────────
   let accountId: string, accessToken: string, caption: string,
-      imageUrl: string | undefined, videoUrl: string | undefined;
+      imageUrl: string | undefined, videoUrl: string | undefined,
+      postType: 'feed' | 'story';
   try {
     const body = await req.json();
     accountId   = body.accountId   ?? '';
@@ -15,6 +16,7 @@ export async function POST(req: NextRequest) {
     caption     = body.caption     ?? '';
     imageUrl    = body.imageUrl;
     videoUrl    = body.videoUrl;
+    postType    = body.postType === 'story' ? 'story' : 'feed';
   } catch (err) {
     console.error('[IG] Request-Body konnte nicht gelesen werden:', err);
     return NextResponse.json({ error: 'Ungültiger Request-Body.' }, { status: 400 });
@@ -22,6 +24,7 @@ export async function POST(req: NextRequest) {
 
   console.log('[IG] Schritt 1 – Parameter:', {
     accountId,
+    postType,
     accessToken_set:    !!accessToken,
     accessToken_prefix: accessToken ? accessToken.slice(0, 8) + '…' : '(fehlt)',
     caption_length:     caption.length,
@@ -49,20 +52,27 @@ export async function POST(req: NextRequest) {
   }
 
   // ── Schritt 2: Media-Container erstellen ─────────────────────
+  // Feed:  Bild → IMAGE (Standard), Video → REELS, mit Caption.
+  // Story: Bild & Video → STORIES, ohne Caption (Stories unterstützen
+  //        keinen Bildunterschrift-Text über die Graph API).
   const containerBody: Record<string, string> = {
-    caption:      caption,
     access_token: accessToken,
   };
+  if (postType === 'feed') {
+    containerBody.caption = caption;
+  }
   if (imageUrl) {
     containerBody.image_url = imageUrl;
+    if (postType === 'story') containerBody.media_type = 'STORIES';
   } else if (videoUrl) {
     containerBody.video_url  = videoUrl;
-    containerBody.media_type = 'REELS';
+    containerBody.media_type = postType === 'story' ? 'STORIES' : 'REELS';
   }
 
   console.log('[IG] Schritt 2 – Container erstellen:', {
     endpoint:  `${IG_API}/${accountId}/media`,
-    mediaType: imageUrl ? 'IMAGE' : 'VIDEO/REELS',
+    mediaType: containerBody.media_type ?? (imageUrl ? 'IMAGE' : 'VIDEO'),
+    postType,
   });
 
   let containerData: Record<string, unknown>;
