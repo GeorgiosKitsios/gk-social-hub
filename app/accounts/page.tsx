@@ -9,9 +9,18 @@ interface FacebookPage {
   id:           string;
   name:         string;
   access_token: string;
+  tasks?:       string[];
 }
 
 const STORAGE_KEY = 'gk-facebook-pages';
+
+/** Eine Page kann nur bespielt werden, wenn der Nutzer dort CREATE_CONTENT darf.
+ *  Ältere Verbindungen ohne tasks-Info gelten als unbekannt (true), damit sie
+ *  nicht fälschlich als gesperrt erscheinen. */
+function canPost(page: FacebookPage): boolean {
+  if (!page.tasks) return true;
+  return page.tasks.includes('CREATE_CONTENT');
+}
 
 function loadPages(): FacebookPage[] {
   try {
@@ -127,9 +136,16 @@ function AccountsContent() {
                 className="flex items-center justify-between py-2.5 px-3 bg-neutral-900 rounded-lg"
               >
                 <div className="flex items-center gap-3">
-                  <div className="w-2 h-2 rounded-full bg-green-500" />
+                  <div className={`w-2 h-2 rounded-full ${canPost(page) ? 'bg-green-500' : 'bg-amber-500'}`} />
                   <div>
-                    <div className="text-sm text-white">{page.name}</div>
+                    <div className="text-sm text-white flex items-center gap-2">
+                      {page.name}
+                      {!canPost(page) && (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-400 border border-amber-500/20">
+                          ⚠ kein Posting-Recht
+                        </span>
+                      )}
+                    </div>
                     <div className="text-xs text-neutral-500">ID: {page.id}</div>
                   </div>
                 </div>

@@ -34,13 +34,14 @@ export async function GET(request: NextRequest) {
     const userToken = tokenData.access_token;
 
     // 2. Alle Pages des Users abrufen (mit Paging-Support)
-    let allPages: { id: string; name: string; access_token: string }[] = [];
+    //    'tasks' liefert die Berechtigungen pro Page (z.B. CREATE_CONTENT zum Posten).
+    let allPages: { id: string; name: string; access_token: string; tasks?: string[] }[] = [];
     let nextUrl: string | null =
-      `https://graph.facebook.com/v19.0/me/accounts?access_token=${userToken}&limit=100`;
+      `https://graph.facebook.com/v19.0/me/accounts?fields=name,access_token,tasks&access_token=${userToken}&limit=100`;
 
     while (nextUrl) {
       const pagesRes: Response = await fetch(nextUrl);
-      const pagesData: { data?: { id: string; name: string; access_token: string }[]; paging?: { next?: string } } = await pagesRes.json();
+      const pagesData: { data?: { id: string; name: string; access_token: string; tasks?: string[] }[]; paging?: { next?: string } } = await pagesRes.json();
 
       if (pagesData.data) {
         allPages = [...allPages, ...pagesData.data];
