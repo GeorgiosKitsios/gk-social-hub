@@ -39,6 +39,8 @@ export interface Post {
   hashtagSetId?: string;
   notes: string;
   boardColumn?: string;
+  /** Instagram-Format für geplante Posts: Feed-Post (Standard) oder Story */
+  igPostType?: 'feed' | 'story';
   tags: string[];
   createdAt: string;
   updatedAt: string;

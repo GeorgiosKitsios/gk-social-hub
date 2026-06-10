@@ -1,16 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-
-const IG_API = 'https://graph.facebook.com/v19.0';
-
-/**
- * Fügt einer Cloudinary-Video-URL die Transformation f_mp4,vc_h264 hinzu,
- * damit Instagram ein H.264-MP4 bekommt – auch bei HEVC/H.265-Quellvideos
- * (z. B. von iPhones). Nicht-Cloudinary-URLs werden unverändert zurückgegeben.
- */
-function toH264Url(url: string): string {
-  if (!url.includes('res.cloudinary.com') || !url.includes('/video/upload/')) return url;
-  return url.replace('/video/upload/', '/video/upload/f_mp4,vc_h264/');
-}
+import { publishInstagram } from '@/lib/instagram';
 
 export async function POST(req: NextRequest) {
   console.log('[IG] ── POST /api/instagram/publish gestartet ──');
@@ -55,123 +44,37 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Instagram benötigt ein Bild oder Video.' }, { status: 400 });
   }
   if (imageUrl?.startsWith('data:')) {
-    console.error('[IG] FEHLER – imageUrl ist eine base64 Data-URL. Instagram benötigt eine öffentliche HTTPS-URL!');
+    console.error('[IG] FEHLER – imageUrl ist eine base64 Data-URL');
     return NextResponse.json({
       error: 'Das Bild muss als öffentliche HTTPS-URL vorliegen. Bitte zuerst in die Medienbibliothek hochladen.',
     }, { status: 400 });
   }
 
-  // ── Schritt 2: Media-Container erstellen ─────────────────────
-  // Feed:  Bild → IMAGE (Standard), Video → REELS, mit Caption.
-  // Story: Bild & Video → STORIES, ohne Caption (Stories unterstützen
-  //        keinen Bildunterschrift-Text über die Graph API).
-  const containerBody: Record<string, string> = {
-    access_token: accessToken,
-  };
-  if (postType === 'feed') {
-    containerBody.caption = caption;
-  }
-  if (imageUrl) {
-    containerBody.image_url = imageUrl;
-    if (postType === 'story') containerBody.media_type = 'STORIES';
-  } else if (videoUrl) {
-    // H.264-Transformation einbauen: Instagram lehnt HEVC/H.265 ab.
-    containerBody.video_url  = toH264Url(videoUrl);
-    containerBody.media_type = postType === 'story' ? 'STORIES' : 'REELS';
-  }
-
-  console.log('[IG] Schritt 2 – Container erstellen:', {
-    endpoint:  `${IG_API}/${accountId}/media`,
-    mediaType: containerBody.media_type ?? (imageUrl ? 'IMAGE' : 'VIDEO'),
-    postType,
+  // ── Schritt 2–4: Publish via gemeinsamer Lib-Funktion ────────
+  // maxPollMs = 60 000 (Standard) → bis zu 12 × 5s Polling für manuelle Posts.
+  const result = await publishInstagram({
+    accountId, accessToken, caption, imageUrl, videoUrl, postType,
+    maxPollMs: 60_000,
+    logPrefix: '[IG]',
   });
 
-  let containerData: Record<string, unknown>;
-  try {
-    const containerRes = await fetch(`${IG_API}/${accountId}/media`, {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify(containerBody),
-    });
-    containerData = await containerRes.json();
-    console.log('[IG] Schritt 2 – Container-Antwort:', {
-      httpStatus: containerRes.status,
-      id:         containerData.id,
-      error:      containerData.error,
-    });
-  } catch (err) {
-    console.error('[IG] Schritt 2 FEHLER – Netzwerkfehler beim Container-Request:', err);
-    return NextResponse.json({ error: 'Netzwerkfehler beim Erstellen des Instagram-Containers.' }, { status: 500 });
+  if (result.status === 'published') {
+    console.log('[IG] ── Erfolgreich veröffentlicht! Post-ID:', result.postId, '──');
+    return NextResponse.json({ success: true, postId: result.postId });
   }
 
-  if (containerData.error) {
-    const igErr = containerData.error as { message?: string; code?: number; type?: string };
-    console.error('[IG] Schritt 2 FEHLER – Instagram API:', igErr);
+  if (result.status === 'pending') {
+    // Sollte bei manuellen Posts mit 60s Timeout selten vorkommen.
+    console.warn('[IG] Video noch nicht fertig nach 60s (creationId:', result.creationId, ')');
     return NextResponse.json({
-      error:    igErr.message ?? 'Container-Erstellung fehlgeschlagen.',
-      igCode:   igErr.code,
-      igType:   igErr.type,
-    }, { status: 400 });
+      error: 'Das Video wird von Instagram noch verarbeitet. Bitte in 1–2 Minuten erneut versuchen.',
+    }, { status: 202 });
   }
 
-  const creationId = containerData.id as string;
-  if (!creationId) {
-    console.error('[IG] Schritt 2 FEHLER – keine Container-ID in Antwort:', containerData);
-    return NextResponse.json({ error: 'Keine Container-ID von Instagram erhalten.' }, { status: 500 });
-  }
-  console.log('[IG] Schritt 2 OK – Container-ID:', creationId);
-
-  // ── Schritt 3: Bei Videos auf Fertigstellung warten ──────────
-  if (videoUrl) {
-    console.log('[IG] Schritt 3 – Video-Status polling (max. 60s)...');
-    for (let i = 0; i < 12; i++) {
-      await new Promise(r => setTimeout(r, 5000));
-      try {
-        const statusRes  = await fetch(`${IG_API}/${creationId}?fields=status_code&access_token=${accessToken}`);
-        const statusData = await statusRes.json() as { status_code?: string; error?: unknown };
-        console.log(`[IG] Schritt 3 – Poll ${i + 1}/12: status_code =`, statusData.status_code);
-        if (statusData.status_code === 'FINISHED') { console.log('[IG] Schritt 3 OK – Video fertig.'); break; }
-        if (statusData.status_code === 'ERROR') {
-          console.error('[IG] Schritt 3 FEHLER – Video-Verarbeitung fehlgeschlagen:', statusData);
-          return NextResponse.json({ error: 'Video-Verarbeitung durch Instagram fehlgeschlagen.' }, { status: 400 });
-        }
-      } catch (pollErr) {
-        console.warn('[IG] Schritt 3 – Poll-Fehler (wird ignoriert):', pollErr);
-      }
-    }
-  }
-
-  // ── Schritt 4: Container veröffentlichen ─────────────────────
-  console.log('[IG] Schritt 4 – Veröffentlichen:', { accountId, creationId });
-
-  let publishData: Record<string, unknown>;
-  try {
-    const publishRes = await fetch(`${IG_API}/${accountId}/media_publish`, {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ creation_id: creationId, access_token: accessToken }),
-    });
-    publishData = await publishRes.json();
-    console.log('[IG] Schritt 4 – Publish-Antwort:', {
-      httpStatus: publishRes.status,
-      id:         publishData.id,
-      error:      publishData.error,
-    });
-  } catch (err) {
-    console.error('[IG] Schritt 4 FEHLER – Netzwerkfehler beim Publish:', err);
-    return NextResponse.json({ error: 'Netzwerkfehler beim Veröffentlichen.' }, { status: 500 });
-  }
-
-  if (publishData.error) {
-    const igErr = publishData.error as { message?: string; code?: number; type?: string };
-    console.error('[IG] Schritt 4 FEHLER – Instagram API:', igErr);
-    return NextResponse.json({
-      error:  igErr.message ?? 'Veröffentlichung fehlgeschlagen.',
-      igCode: igErr.code,
-      igType: igErr.type,
-    }, { status: 400 });
-  }
-
-  console.log('[IG] ── Erfolgreich veröffentlicht! Post-ID:', publishData.id, '──');
-  return NextResponse.json({ success: true, postId: publishData.id });
+  // status === 'error'
+  console.error('[IG] Fehler:', result.error, result.igCode ? `(Code ${result.igCode})` : '');
+  return NextResponse.json({
+    error:  result.error,
+    igCode: result.igCode,
+  }, { status: 400 });
 }

@@ -39,13 +39,34 @@ const TEMPLATE_TABS: { value: TemplateType; label: string }[] = [
   { value: 'cta',         label: 'CTAs'     },
 ];
 
-const FACEBOOK_PAGES_STORAGE_KEY = 'gk-facebook-pages';
+const FACEBOOK_PAGES_STORAGE_KEY  = 'gk-facebook-pages';
+const INSTAGRAM_ACCOUNTS_STORAGE_KEY = 'gk-instagram-accounts';
 
 interface StoredFacebookPage {
   id:            string;
   name:          string;
   access_token:  string;
   brand_id?:     string;
+}
+
+interface StoredInstagramAccount {
+  id:          string;
+  name:        string;
+  accountId:   string;
+  accessToken: string;
+}
+
+function loadInstagramAccountsForSync(): StoredInstagramAccount[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw      = window.localStorage.getItem(INSTAGRAM_ACCOUNTS_STORAGE_KEY);
+    const accounts = raw ? JSON.parse(raw) : [];
+    if (!Array.isArray(accounts)) return [];
+    return accounts.filter(
+      (a): a is StoredInstagramAccount =>
+        typeof a?.id === 'string' && typeof a?.accountId === 'string' && typeof a?.accessToken === 'string'
+    );
+  } catch { return []; }
 }
 
 function loadFacebookPagesForSync(brandId: string): StoredFacebookPage[] {
@@ -291,11 +312,12 @@ export default function PostEditor({ postId, presetDate }: Props) {
     const validationError = validateScheduledPost(post);
     if (validationError) throw new Error(validationError);
 
-    const facebookPages = loadFacebookPagesForSync(post.brandId);
+    const facebookPages      = loadFacebookPagesForSync(post.brandId);
+    const instagramAccounts  = loadInstagramAccountsForSync();
     const response = await fetch('/api/cron/sync', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ posts: [post], facebookPages }),
+      body: JSON.stringify({ posts: [post], facebookPages, instagramAccounts }),
     });
 
     const data = await response.json().catch(() => null);
@@ -309,7 +331,7 @@ export default function PostEditor({ postId, presetDate }: Props) {
       throw new Error('Sync fehlgeschlagen: Der Post wurde nicht in Supabase gespeichert.');
     }
 
-    return data as { postsSynced: number; pagesSynced: number };
+    return data as { postsSynced: number; pagesSynced: number; igAccountsSynced: number };
   }
 
   async function handleSave(newStatus?: PostStatus) {
@@ -357,7 +379,8 @@ export default function PostEditor({ postId, presetDate }: Props) {
       setIsSyncing(true);
       try {
         const result = await syncScheduledPost(savedPost);
-        setSyncMessage(`✓ Post nach Supabase synchronisiert (${result.postsSynced} Post, ${result.pagesSynced} Facebook-Pages).`);
+        const igPart = result.igAccountsSynced > 0 ? `, ${result.igAccountsSynced} Instagram-Accounts` : '';
+        setSyncMessage(`✓ Post nach Supabase synchronisiert (${result.postsSynced} Post, ${result.pagesSynced} Facebook-Pages${igPart}).`);
         if (isNew) {
           setTimeout(() => router.push(`/posts/${savedPost.id}`), 900);
         } else {
@@ -752,6 +775,29 @@ export default function PostEditor({ postId, presetDate }: Props) {
                 </p>
               )}
             </div>
+
+            {/* Instagram-Format (für geplante Posts via Cron) */}
+            {form.platforms.includes('instagram') && (
+              <>
+                <div className="border-t border-neutral-800" />
+                <div>
+                  <label className="block text-xs text-neutral-400 mb-2">Instagram-Format</label>
+                  <div className="flex gap-1 bg-neutral-800 p-1 rounded-lg">
+                    {(['feed', 'story'] as const).map(t => (
+                      <button key={t} onClick={() => setForm(f => ({ ...f, igPostType: t }))}
+                        className={`flex-1 px-2 py-1.5 text-xs rounded-md transition-colors ${
+                          (form.igPostType ?? 'feed') === t ? 'bg-neutral-600 text-white' : 'text-neutral-400 hover:text-white'
+                        }`}>
+                        {t === 'feed' ? '🖼 Feed' : '⊕ Story'}
+                      </button>
+                    ))}
+                  </div>
+                  {(form.igPostType ?? 'feed') === 'story' && (
+                    <p className="text-xs text-neutral-600 mt-1.5">Story: nur Bild/Video, ohne Caption.</p>
+                  )}
+                </div>
+              </>
+            )}
 
             <div className="border-t border-neutral-800" />
 

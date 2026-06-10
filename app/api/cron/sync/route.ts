@@ -27,6 +27,7 @@ interface PostPayload {
   scheduledAt?:   string | null;
   publishedAt?:   string | null;
   errorMessage?:  string | null;
+  igPostType?:    'feed' | 'story' | null;
   createdAt:      string;
   updatedAt:      string;
 }
@@ -38,6 +39,13 @@ interface FbPagePayload {
   brand_id?:    string;
 }
 
+interface IgAccountPayload {
+  id:          string;  // = Facebook Page ID (PK in instagram_accounts)
+  name:        string;
+  accountId:   string;  // IG Business Account ID
+  accessToken: string;
+}
+
 export async function POST(req: NextRequest) {
   console.log('[SYNC] ── sync job gestartet ──');
 
@@ -47,16 +55,18 @@ export async function POST(req: NextRequest) {
 
   let posts: PostPayload[] = [];
   let facebookPages: FbPagePayload[] = [];
+  let instagramAccounts: IgAccountPayload[] = [];
 
   try {
-    const body       = await req.json();
-    posts            = Array.isArray(body.posts)         ? body.posts         : [];
-    facebookPages    = Array.isArray(body.facebookPages) ? body.facebookPages : [];
+    const body        = await req.json();
+    posts             = Array.isArray(body.posts)             ? body.posts             : [];
+    facebookPages     = Array.isArray(body.facebookPages)     ? body.facebookPages     : [];
+    instagramAccounts = Array.isArray(body.instagramAccounts) ? body.instagramAccounts : [];
   } catch {
     return NextResponse.json({ error: 'Ungültiger Request-Body.' }, { status: 400 });
   }
 
-  console.log(`[SYNC] ${posts.length} Posts, ${facebookPages.length} FB-Pages`);
+  console.log(`[SYNC] ${posts.length} Posts, ${facebookPages.length} FB-Pages, ${instagramAccounts.length} IG-Accounts`);
 
   // ── Posts upserten ──────────────────────────────────────────────────────────
   const postRows = posts.map(p => ({
@@ -71,13 +81,24 @@ export async function POST(req: NextRequest) {
     scheduled_at:   p.scheduledAt   ?? null,
     published_at:   p.publishedAt   ?? null,
     error_message:  p.errorMessage  ?? null,
+    ig_post_type:   p.igPostType    ?? 'feed',
     created_at:     p.createdAt,
     updated_at:     p.updatedAt,
   }));
 
-  const { error: postError } = await supabaseAdmin
+  let { error: postError } = await supabaseAdmin
     .from('posts')
     .upsert(postRows, { onConflict: 'id' });
+
+  // Fallback: Spalte ig_post_type existiert noch nicht (SQL-Migration ausstehend)
+  if (postError && postError.code === '42703') {
+    console.warn('[SYNC] Spalte ig_post_type fehlt – Retry ohne das Feld. SQL-Migration ausführen:',
+      "ALTER TABLE posts ADD COLUMN ig_post_type TEXT DEFAULT 'feed';");
+    const rowsWithoutIgType = postRows.map(({ ig_post_type: _omit, ...rest }) => rest);
+    ({ error: postError } = await supabaseAdmin
+      .from('posts')
+      .upsert(rowsWithoutIgType, { onConflict: 'id' }));
+  }
 
   if (postError) {
     console.error('[SYNC] Post-Upsert Fehler:', postError);
@@ -108,9 +129,36 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  // ── Instagram-Accounts upserten ────────────────────────────────────────────
+  // id = Facebook Page ID, dient als Join-Schlüssel im Cron-Job
+  // (instagram_accounts.id = facebook_pages.page_id → Brand-Zuordnung)
+  let igAccountsSynced = 0;
+  if (instagramAccounts.length > 0) {
+    const igRows = instagramAccounts.map(a => ({
+      id:           a.id,
+      name:         a.name,
+      account_id:   a.accountId,
+      access_token: a.accessToken,
+      updated_at:   new Date().toISOString(),
+    }));
+
+    const { error: igError } = await supabaseAdmin
+      .from('instagram_accounts')
+      .upsert(igRows, { onConflict: 'id' });
+
+    if (igError) {
+      // Nicht kritisch – Tabelle existiert möglicherweise noch nicht
+      console.warn('[SYNC] IG-Accounts Fehler (nicht kritisch):', igError.message);
+    } else {
+      igAccountsSynced = igRows.length;
+      console.log(`[SYNC] ${igRows.length} IG-Accounts gespeichert`);
+    }
+  }
+
   return NextResponse.json({
-    success:     true,
-    postsSynced: postRows.length,
-    pagesSynced: facebookPages.length,
+    success:          true,
+    postsSynced:      postRows.length,
+    pagesSynced:      facebookPages.length,
+    igAccountsSynced,
   });
 }
