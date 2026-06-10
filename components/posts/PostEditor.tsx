@@ -235,10 +235,10 @@ export default function PostEditor({ postId, presetDate }: Props) {
   const { getById: getMediaById } = useMediaStore();
 
   const isNew   = !postId;
-  const brand   = activeBrand();
-  const brandId = activeBrandId ?? brands.filter(b => !b.archived)[0]?.id ?? '';
+  // Fallback: global aktive Marke (für neue Posts)
+  const fallbackBrandId = activeBrandId ?? brands.filter(b => !b.archived)[0]?.id ?? '';
 
-  const [form, setForm]           = useState(emptyForm(brandId));
+  const [form, setForm]           = useState(emptyForm(fallbackBrandId));
   const [scheduledDate, setDate]  = useState('');
   const [scheduledTime, setTime]  = useState('09:00');
   const [saved, setSaved]         = useState(false);
@@ -255,6 +255,11 @@ export default function PostEditor({ postId, presetDate }: Props) {
   const activePrev: Platform = form.platforms.includes(previewPlatform)
     ? previewPlatform
     : (form.platforms[0] ?? 'facebook');
+
+  // Bestehende Posts: Marke des Posts verwenden – NICHT die global aktive Marke.
+  // Neue Posts: global aktive Marke (steckt via emptyForm bereits in form.brandId).
+  const brandId = (!isNew && form.brandId) ? form.brandId : fallbackBrandId;
+  const brand   = brands.find(b => b.id === brandId) ?? activeBrand();
 
   useEffect(() => {
     if (!isNew && postId) {

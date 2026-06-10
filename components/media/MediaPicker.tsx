@@ -1,14 +1,19 @@
 'use client';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useMediaStore } from '@/store/useMediaStore';
 import { Media } from '@/lib/types';
 import MediaCard     from './MediaCard';
 import MediaUploader from './MediaUploader';
 
 export default function MediaPicker({ brandId, selectedIds, onConfirm, onClose }: { brandId: string; selectedIds: string[]; onConfirm: (ids: string[]) => void; onClose: () => void }) {
-  const { media } = useMediaStore();
+  const { media, fetchByBrand } = useMediaStore();
   const [chosen, setChosen]         = useState<string[]>(selectedIds);
   const [showUpload, setShowUpload] = useState(false);
+
+  // Beim Öffnen die aktuellen Medien der richtigen Marke laden
+  useEffect(() => {
+    if (brandId) fetchByBrand(brandId).catch(() => { /* Fehler loggt der Store */ });
+  }, [brandId]);
 
   const brandMedia = media.filter(m => m.brandId===brandId);
   const sorted = [...brandMedia].sort((a,b) => new Date(b.uploadedAt).getTime()-new Date(a.uploadedAt).getTime());

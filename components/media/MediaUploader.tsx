@@ -61,9 +61,11 @@ export default function MediaUploader({
 }) {
   const { fetchByBrand } = useMediaStore();
   const { activeBrandId } = useBrandStore();
-  const brandId = typeof activeBrandId === 'string' && activeBrandId
-    ? activeBrandId
-    : (brandIdProp ?? '');
+  // Prop gewinnt (Kontext des Aufrufers, z. B. Post-Marke im MediaPicker).
+  // String-Guard verhindert den alten "[object Object]"-Bug bei stalen Store-Daten.
+  const brandId = typeof brandIdProp === 'string' && brandIdProp
+    ? brandIdProp
+    : (typeof activeBrandId === 'string' && activeBrandId ? activeBrandId : '');
 
   const inputRef              = useRef<HTMLInputElement>(null);
   const [dragging,  setDragging]  = useState(false);
