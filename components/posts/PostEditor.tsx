@@ -655,6 +655,8 @@ export default function PostEditor({ postId, presetDate }: Props) {
                 tone={brand.aiTone}
                 platforms={form.platforms}
                 language={brand.aiLanguage}
+                brandId={brandId}
+                mediaIds={form.mediaIds}
                 onInsert={text => setForm(f => ({ ...f, mainText: f.mainText ? `${f.mainText}\n\n${text}` : text }))}
               />
             )}
