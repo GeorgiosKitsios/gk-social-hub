@@ -11,12 +11,13 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { CLAUDE_MODEL } from '@/lib/aiModel';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
 const ANTHROPIC_API = 'https://api.anthropic.com/v1/messages';
-const MODEL         = 'claude-sonnet-4-20250514';
+const MODEL         = CLAUDE_MODEL;
 
 interface TemplatePayload {
   type:    string;   // 'footer' | 'hashtag_set' | 'text' | 'cta'

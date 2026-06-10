@@ -1,4 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk';
+import { CLAUDE_MODEL } from '@/lib/aiModel';
 
 export type AiMode = 'text' | 'variants' | 'hooks' | 'hashtags';
 
@@ -81,7 +82,7 @@ export async function generateAiContent(req: AiRequest): Promise<AiResult> {
   const client = new Anthropic({ apiKey, dangerouslyAllowBrowser: true });
 
   const message = await client.messages.create({
-    model:      'claude-sonnet-4-20250514',
+    model:      CLAUDE_MODEL,
     max_tokens: 1024,
     messages:   [{ role: 'user', content: buildPrompt(req) }],
   });
