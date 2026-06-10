@@ -52,6 +52,8 @@ function buildPrompt(req: AiRequest): string {
     `Sprache: ${langStr}.`,
     `Thema / Kontext: ${req.prompt}`,
     'Antworte NUR mit dem angeforderten Inhalt, ohne Einleitung oder Erklärung.',
+    'WICHTIG – Formatierung: Verwende NIEMALS Markdown – keine Sternchen, keine Unterstriche, kein Fettdruck. Social-Media-Posts sind reiner Text mit Emojis.',
+    'WICHTIG – Fakten: Erfinde NIEMALS URLs, Domains, Preise, Telefonnummern oder Adressen. Verwende nur Angaben, die im Thema/Kontext ausdrücklich genannt sind. Wenn keine URL mitgeliefert wurde, schreibe keine URL in den Text.',
   ].filter(Boolean).join('\n');
 
   const instructions: Record<AiMode, string> = {
