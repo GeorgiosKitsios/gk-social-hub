@@ -204,6 +204,9 @@ async function runPublishJob(req: NextRequest) {
       } else {
         igAccounts = (rawIG ?? []) as IgAccountRow[];
         console.log(`[CRON] Schritt 4b – ${igAccounts.length} IG-Account(s) geladen`);
+        for (const a of igAccounts) {
+          console.log(`[CRON] Schritt 4b   "${a.name}": id(=FB-Page-ID)=${a.id}, account_id=${a.account_id || '(LEER!)'}, access_token=${a.access_token ? `gesetzt (${a.access_token.length} Zeichen)` : 'FEHLT!'}`);
+        }
       }
     } catch (e) {
       console.warn('[CRON] Schritt 4b – IG-Accounts Exception:', e);
@@ -334,6 +337,7 @@ async function runPublishJob(req: NextRequest) {
         const igAccountsForBrand = igAccounts.filter(a => brandFbPageIds.includes(a.id));
 
         console.log(`[CRON]   IG: ${igAccountsForBrand.length} Account(s) für Brand ${post.brand_id}`);
+        console.log(`[CRON]   IG-Zuordnung: FB-Page-IDs der Brand=[${brandFbPageIds.join(', ') || '(keine)'}] | vorhandene IG-Account-IDs=[${igAccounts.map(a => a.id).join(', ') || '(keine)'}]`);
 
         if (igAccountsForBrand.length === 0) {
           const msg = igAccounts.length === 0
@@ -378,7 +382,8 @@ async function runPublishJob(req: NextRequest) {
             console.log(`[CRON]   IG-Format: ${igPostType === 'story' ? 'Story' : 'Feed-Post'}`);
 
             for (const igAccount of igAccountsForBrand) {
-              console.log(`[CRON]   → IG: ${igAccount.name} (account_id: ${igAccount.account_id})`);
+              console.log(`[CRON]   → IG: ${igAccount.name} (account_id: ${igAccount.account_id || '(LEER!)'})`);
+              console.log(`[CRON]     IG-Token: ${igAccount.access_token ? `aus DB geladen (${igAccount.access_token.length} Zeichen)` : 'FEHLT in instagram_accounts.access_token!'} | Caption: ${igCaption.length} Zeichen | Medium: ${igVideoUrl ? 'Video' : 'Bild'}`);
               try {
                 // maxPollMs=10_000 → max 2×5s Polls, sicher unter 60s curl-Limit
                 const result = await publishInstagram({
@@ -391,6 +396,8 @@ async function runPublishJob(req: NextRequest) {
                   maxPollMs:   10_000,
                   logPrefix:   '[CRON][IG]',
                 });
+
+                console.log(`[CRON]     IG-Ergebnis (roh): ${JSON.stringify(result).slice(0, 200)}`);
 
                 if (result.status === 'published') {
                   console.log(`[CRON]   ✓ IG ${igAccount.name}: Post-ID ${result.postId}`);
@@ -421,6 +428,7 @@ async function runPublishJob(req: NextRequest) {
         }
       } else {
         igDone = true; // kein Instagram in den Plattformen
+        console.log(`[CRON]   IG: Übersprungen – 'instagram' nicht in platforms. Plattformen des Posts: ${(post.platforms ?? []).join(', ') || '(leer)'}`);
       }
 
       // ── Status in Supabase aktualisieren ──────────────────────────────────────
