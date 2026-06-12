@@ -657,6 +657,7 @@ export default function PostEditor({ postId, presetDate }: Props) {
             {brand && (
               <AiAssistant
                 brandName={brand.name}
+                brandDescription={brand.description}
                 tone={brand.aiTone}
                 platforms={form.platforms}
                 language={brand.aiLanguage}

@@ -11,6 +11,8 @@ export interface Brand {
   logoUrl?: string;
   color: BrandColor;
   industry: string;
+  /** Marken-Beschreibung für KI – fließt als erster Kontext-Block in alle KI-Prompts ein */
+  description?: string;
   aiTone: AiTone;
   aiLanguage: 'de' | 'en';
   platforms: Platform[];

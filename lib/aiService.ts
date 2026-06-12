@@ -11,6 +11,7 @@ export interface AiRequest {
   mode:      AiMode;
   tone:      AiTone;
   brand:     string;
+  brandDescription?: string;
   platforms: string[];
   language?: string;
 }
@@ -47,6 +48,7 @@ function buildPrompt(req: AiRequest): string {
 
   const base = [
     `Du bist ein Social-Media-Texter für die Marke "${req.brand}".`,
+    req.brandDescription?.trim() ? `Über die Marke:\n${req.brandDescription.trim()}` : '',
     tone,
     plat ? `Plattform-Hinweise: ${plat}` : '',
     `Sprache: ${langStr}.`,

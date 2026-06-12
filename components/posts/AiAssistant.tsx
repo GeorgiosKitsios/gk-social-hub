@@ -24,7 +24,7 @@ const MODE_COLORS: Record<AiMode,string> = {
   hashtags: 'bg-teal-500/10  text-teal-400  border-teal-500/40',
 };
 
-export default function AiAssistant({ brandName, tone, platforms, language='de', onInsert, brandId, mediaIds = [] }: { brandName: string; tone: AiTone; platforms: string[]; language?: string; onInsert: (text: string) => void; brandId?: string; mediaIds?: string[] }) {
+export default function AiAssistant({ brandName, brandDescription, tone, platforms, language='de', onInsert, brandId, mediaIds = [] }: { brandName: string; brandDescription?: string; tone: AiTone; platforms: string[]; language?: string; onInsert: (text: string) => void; brandId?: string; mediaIds?: string[] }) {
   const [prompt, setPrompt]   = useState('');
   const [loading, setLoading] = useState<AiMode|null>(null);
   const [results, setResults] = useState<{ mode: AiMode; items: string[] }|null>(null);
@@ -47,7 +47,7 @@ export default function AiAssistant({ brandName, tone, platforms, language='de',
     if (!prompt.trim()) { setError('Bitte zuerst einen Kontext eingeben.'); return; }
     setError(null); setLoading(mode); setResults(null);
     try {
-      const res = await generateAiContent({ prompt:prompt.trim(), mode, tone, brand:brandName, platforms, language });
+      const res = await generateAiContent({ prompt:prompt.trim(), mode, tone, brand:brandName, brandDescription, platforms, language });
       setResults(res);
     } catch(e: unknown) { setError(e instanceof Error ? e.message : 'Unbekannter Fehler.'); }
     finally { setLoading(null); }
@@ -68,6 +68,7 @@ export default function AiAssistant({ brandName, tone, platforms, language='de',
           imageUrl: firstImage.url,
           brandId,
           brandName,
+          brandDescription,
           tone,
           platforms,
           templates,

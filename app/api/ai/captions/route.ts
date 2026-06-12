@@ -47,6 +47,7 @@ const PLATFORM_HINTS: Record<string, string> = {
 
 function buildPrompt(
   brandName: string,
+  brandDescription: string,
   tone: string,
   platforms: string[],
   templates: TemplatePayload[],
@@ -66,6 +67,7 @@ function buildPrompt(
   return [
     // ── 1. Marken-Kontext ──
     `Du bist ein Social-Media-Texter für die Marke "${brandName}".`,
+    brandDescription.trim() ? `Über die Marke:\n${brandDescription.trim()}` : '',
     toneStr,
     platStr ? `Plattform-Hinweise: ${platStr}` : '',
     'Sprache: Deutsch.',
@@ -127,12 +129,13 @@ export async function POST(req: NextRequest) {
   }
 
   // ── Body lesen ──────────────────────────────────────────────────────────────
-  let imageUrl: string, brandName: string, tone: string,
+  let imageUrl: string, brandName: string, brandDescription: string, tone: string,
       platforms: string[], templates: TemplatePayload[];
   try {
     const body = await req.json();
     imageUrl   = body.imageUrl  ?? '';
     brandName  = body.brandName ?? body.brandId ?? 'Marke';
+    brandDescription = typeof body.brandDescription === 'string' ? body.brandDescription : '';
     tone       = body.tone      ?? 'professionell';
     platforms  = Array.isArray(body.platforms) ? body.platforms : [];
     templates  = Array.isArray(body.templates) ? body.templates : [];
@@ -153,7 +156,7 @@ export async function POST(req: NextRequest) {
   });
 
   // ── Claude Vision aufrufen ──────────────────────────────────────────────────
-  const prompt = buildPrompt(brandName, tone, platforms, templates);
+  const prompt = buildPrompt(brandName, brandDescription, tone, platforms, templates);
 
   let anthropicRes: Response;
   try {

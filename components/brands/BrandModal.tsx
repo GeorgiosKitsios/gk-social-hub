@@ -6,7 +6,7 @@ import { useBrandStore } from '@/store/useBrandStore';
 const PLATFORMS: { value: Platform; label: string }[] = [{ value:'facebook',label:'Facebook' },{ value:'instagram',label:'Instagram' },{ value:'tiktok',label:'TikTok' }];
 const AI_TONES: { value: AiTone; label: string }[] = [{ value:'professionell',label:'Professionell' },{ value:'locker',label:'Locker' },{ value:'motivierend',label:'Motivierend' },{ value:'aggressiv',label:'Aggressiv' }];
 const PRESET_COLORS = ['#D85A30','#378ADD','#639922','#7F77DD','#BA7517','#1D9E75','#D4537E','#E24B4A','#888780'];
-const EMPTY_FORM = { name:'', industry:'', color:PRESET_COLORS[0], aiTone:'professionell' as AiTone, aiLanguage:'de' as 'de'|'en', platforms:[] as Platform[] };
+const EMPTY_FORM = { name:'', industry:'', description:'', color:PRESET_COLORS[0], aiTone:'professionell' as AiTone, aiLanguage:'de' as 'de'|'en', platforms:[] as Platform[] };
 
 export default function BrandModal({ mode, onClose }: { mode: Brand|'new'|null; onClose: () => void }) {
   const { addBrand, updateBrand, archiveBrand } = useBrandStore();
@@ -16,7 +16,7 @@ export default function BrandModal({ mode, onClose }: { mode: Brand|'new'|null; 
   const isEdit = mode!==null && mode!=='new';
 
   useEffect(() => {
-    if (isEdit) setForm({ name:mode.name, industry:mode.industry, color:mode.color, aiTone:mode.aiTone, aiLanguage:mode.aiLanguage, platforms:[...mode.platforms] });
+    if (isEdit) setForm({ name:mode.name, industry:mode.industry, description:mode.description ?? '', color:mode.color, aiTone:mode.aiTone, aiLanguage:mode.aiLanguage, platforms:[...mode.platforms] });
     else setForm(EMPTY_FORM);
     setConfirmArchive(false);
   }, [mode]);
@@ -45,6 +45,7 @@ export default function BrandModal({ mode, onClose }: { mode: Brand|'new'|null; 
         <div className="px-5 py-4 flex flex-col gap-4">
           <div><label className="block text-xs text-neutral-400 mb-1">Markenname *</label><input type="text" value={form.name} onChange={e=>setForm(f=>({...f,name:e.target.value}))} placeholder="z. B. FC Hellas München" className="w-full bg-neutral-800 border border-neutral-600 rounded-lg px-3 py-2 text-sm text-white placeholder-neutral-500 focus:outline-none focus:border-blue-500" /></div>
           <div><label className="block text-xs text-neutral-400 mb-1">Branche</label><input type="text" value={form.industry} onChange={e=>setForm(f=>({...f,industry:e.target.value}))} placeholder="z. B. Fußball, Software" className="w-full bg-neutral-800 border border-neutral-600 rounded-lg px-3 py-2 text-sm text-white placeholder-neutral-500 focus:outline-none focus:border-blue-500" /></div>
+          <div><label className="block text-xs text-neutral-400 mb-1">Marken-Beschreibung für KI</label><textarea value={form.description} onChange={e=>setForm(f=>({...f,description:e.target.value}))} rows={4} placeholder="Was macht die Marke? Zielgruppe, Angebot, Besonderheiten – fließt in alle KI-Texte ein." className="w-full bg-neutral-800 border border-neutral-600 rounded-lg px-3 py-2 text-sm text-white placeholder-neutral-500 focus:outline-none focus:border-blue-500 resize-y" /></div>
           <div>
             <label className="block text-xs text-neutral-400 mb-2">Markenfarbe</label>
             <div className="flex gap-2 flex-wrap">
