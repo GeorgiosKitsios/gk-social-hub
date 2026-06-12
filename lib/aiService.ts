@@ -56,6 +56,7 @@ function buildPrompt(req: AiRequest): string {
     'Antworte NUR mit dem angeforderten Inhalt, ohne Einleitung oder Erklärung.',
     'WICHTIG – Formatierung: Verwende NIEMALS Markdown – keine Sternchen, keine Unterstriche, kein Fettdruck. Social-Media-Posts sind reiner Text mit Emojis.',
     'WICHTIG – Fakten: Erfinde NIEMALS URLs, Domains, Preise, Telefonnummern oder Adressen. Verwende nur Angaben, die im Thema/Kontext ausdrücklich genannt sind. Wenn keine URL mitgeliefert wurde, schreibe keine URL in den Text.',
+    'WICHTIG – Keine Beschriftungen: Die Antwort darf KEINE Beschriftungen, Präfixe oder Überschriften enthalten wie "Instagram:", "Instagram-Post:", "Caption:", "Variante 1 – Nutzen/Mehrwert:" oder Ähnliches. Nur der reine Post-Text.',
   ].filter(Boolean).join('\n');
 
   const instructions: Record<AiMode, string> = {

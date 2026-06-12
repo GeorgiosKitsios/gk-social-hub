@@ -85,6 +85,7 @@ function buildPrompt(
     '',
     'WICHTIG – Formatierung: Verwende in hook, text, hashtags und cta NIEMALS Markdown – keine Sternchen, keine Unterstriche, kein Fettdruck. Social-Media-Posts sind reiner Text mit Emojis.',
     'WICHTIG – Fakten: Erfinde NIEMALS URLs, Domains, Preise, Telefonnummern oder Adressen. Verwende nur Angaben, die in den oben mitgelieferten Vorlagen stehen. Wenn dort keine URL vorkommt, schreibe keine URL in den Text.',
+    'WICHTIG – Keine Beschriftungen: hook, text, hashtags und cta dürfen KEINE Beschriftungen, Präfixe oder Überschriften enthalten wie "Instagram:", "Instagram-Post:", "Caption:", "Variante 1 – Nutzen/Mehrwert:" oder Ähnliches. Nur der reine Post-Text.',
     '',
     'Antworte AUSSCHLIESSLICH mit validem JSON in exakt diesem Format, ohne Markdown-Codeblock, ohne Erklärung:',
     '[',
