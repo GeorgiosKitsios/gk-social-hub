@@ -111,12 +111,17 @@ export async function POST(req: NextRequest) {
 
   // ── Facebook-Pages upserten ─────────────────────────────────────────────────
   if (facebookPages.length > 0) {
-    const pageRows = facebookPages.map(p => ({
-      page_id:      p.id,
-      name:         p.name,
-      access_token: p.access_token,
-      brand_id:     p.brand_id ?? null,
-    }));
+    // brand_id nur einschließen wenn explizit gesetzt – so werden korrekt gesetzte
+    // Werte in Supabase nicht durch null aus dem localStorage überschrieben.
+    const pageRows = facebookPages.map(p => {
+      const row: Record<string, unknown> = {
+        page_id:      p.id,
+        name:         p.name,
+        access_token: p.access_token,
+      };
+      if (p.brand_id != null) row.brand_id = p.brand_id;
+      return row;
+    });
 
     const { error: pageError } = await supabaseAdmin
       .from('facebook_pages')

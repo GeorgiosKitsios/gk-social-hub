@@ -8,11 +8,13 @@ interface FacebookPage {
   name:         string;
   access_token: string;
   tasks?:       string[];
+  brand_id?:    string | null;
 }
 
 interface Props {
   message:           string;
   mediaIds?:         string[];
+  brandId?:          string;
   validationErrors?: string[];
   onSuccess?:        (postId: string, pageName: string) => void;
   onError?:          (error: string) => void;
@@ -50,7 +52,7 @@ function isPermissionError(err?: string): boolean {
 type PostVariant = 'text' | 'image' | 'video_feed' | 'video_reel';
 type PostMode    = 'feed' | 'story';
 
-export default function FacebookPublishButton({ message, mediaIds = [], validationErrors, onSuccess, onError }: Props) {
+export default function FacebookPublishButton({ message, mediaIds = [], brandId, validationErrors, onSuccess, onError }: Props) {
   const [loading,        setLoading]        = useState(false);
   const [postMode,       setPostMode]       = useState<PostMode>('feed');
   const [showTypePicker, setShowTypePicker] = useState(false);
@@ -59,10 +61,13 @@ export default function FacebookPublishButton({ message, mediaIds = [], validati
   const { getById } = useMediaStore();
   const pages = loadPages();
 
-  // Auswahl-State: pageId → angehakt. Standardmäßig nur Pages mit Posting-Recht.
+  // Standardauswahl: nur Pages der aktiven Marke (wenn brandId gesetzt), andere sichtbar aber abgehakt.
   const [selected, setSelected] = useState<Record<string, boolean>>(() => {
     const init: Record<string, boolean> = {};
-    for (const p of loadPages()) init[p.id] = canPost(p);
+    for (const p of loadPages()) {
+      const isBrandMatch = !brandId || p.brand_id === brandId;
+      init[p.id] = isBrandMatch && canPost(p);
+    }
     return init;
   });
 

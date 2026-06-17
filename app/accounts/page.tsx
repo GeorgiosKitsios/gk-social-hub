@@ -10,6 +10,7 @@ interface FacebookPage {
   name:         string;
   access_token: string;
   tasks?:       string[];
+  brand_id?:    string | null;
 }
 
 interface InstagramAccount {
@@ -157,6 +158,14 @@ function AccountsContent() {
     setFbPages(updated);
   }
 
+  function assignBrandToPage(pageId: string, brandId: string | null) {
+    const updated = fbPages.map(p =>
+      p.id === pageId ? { ...p, brand_id: brandId ?? undefined } : p
+    );
+    savePages(updated);
+    setFbPages(updated);
+  }
+
   function disconnectIg(accountId: string) {
     const updated = igAccounts.filter(a => a.accountId !== accountId);
     saveIgAccounts(updated);
@@ -205,12 +214,12 @@ function AccountsContent() {
             {fbPages.map(page => (
               <div
                 key={page.id}
-                className="flex items-center justify-between py-2.5 px-3 bg-neutral-900 rounded-lg"
+                className="flex items-center justify-between py-2.5 px-3 bg-neutral-900 rounded-lg gap-2"
               >
-                <div className="flex items-center gap-3">
-                  <div className={`w-2 h-2 rounded-full ${canPost(page) ? 'bg-green-500' : 'bg-amber-500'}`} />
-                  <div>
-                    <div className="text-sm text-white flex items-center gap-2">
+                <div className="flex items-center gap-3 min-w-0 flex-1">
+                  <div className={`w-2 h-2 rounded-full shrink-0 ${canPost(page) ? 'bg-green-500' : 'bg-amber-500'}`} />
+                  <div className="min-w-0">
+                    <div className="text-sm text-white flex items-center gap-2 flex-wrap">
                       {page.name}
                       {!canPost(page) && (
                         <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-400 border border-amber-500/20">
@@ -221,9 +230,19 @@ function AccountsContent() {
                     <div className="text-xs text-neutral-500">ID: {page.id}</div>
                   </div>
                 </div>
+                <select
+                  value={page.brand_id ?? ''}
+                  onChange={e => assignBrandToPage(page.id, e.target.value || null)}
+                  className="text-xs bg-neutral-800 border border-neutral-700 rounded px-2 py-1 text-neutral-300 focus:outline-none focus:border-blue-500 shrink-0"
+                >
+                  <option value="">– Marke –</option>
+                  {active.map(b => (
+                    <option key={b.id} value={b.id}>{b.name}</option>
+                  ))}
+                </select>
                 <button
                   onClick={() => disconnectPage(page.id)}
-                  className="text-xs px-3 py-1 rounded border border-neutral-600 text-neutral-400 hover:text-red-400 hover:border-red-500 transition-colors"
+                  className="text-xs px-3 py-1 rounded border border-neutral-600 text-neutral-400 hover:text-red-400 hover:border-red-500 transition-colors shrink-0"
                 >
                   Trennen
                 </button>

@@ -10,9 +10,15 @@ interface InstagramAccount {
   accessToken: string;
 }
 
+interface FacebookPageBrief {
+  id:       string;
+  brand_id?: string | null;
+}
+
 interface Props {
   message:           string;
   mediaIds?:         string[];
+  brandId?:          string;
   validationErrors?: string[];
   onSuccess?:        (postId: string, accountName: string) => void;
   onError?:          (error: string) => void;
@@ -27,7 +33,14 @@ function loadAccounts(): InstagramAccount[] {
   } catch { return []; }
 }
 
-export default function InstagramPublishButton({ message, mediaIds = [], validationErrors, onSuccess, onError }: Props) {
+function loadFbPages(): FacebookPageBrief[] {
+  try {
+    const raw = localStorage.getItem('gk-facebook-pages');
+    return raw ? JSON.parse(raw) : [];
+  } catch { return []; }
+}
+
+export default function InstagramPublishButton({ message, mediaIds = [], brandId, validationErrors, onSuccess, onError }: Props) {
   const [loading,  setLoading]  = useState(false);
   const [postType, setPostType] = useState<PostType>('feed');
   const [results,  setResults]  = useState<{ account: string; success: boolean; error?: string }[]>([]);
@@ -35,10 +48,15 @@ export default function InstagramPublishButton({ message, mediaIds = [], validat
   const { getById }  = useMediaStore();
   const accounts     = loadAccounts();
 
-  // Auswahl-State: accountId → angehakt. Standardmäßig alle.
+  // Standardauswahl: nur Accounts der aktiven Marke (account.id = FB Page ID → brand_id lookup).
   const [selected, setSelected] = useState<Record<string, boolean>>(() => {
     const init: Record<string, boolean> = {};
-    for (const a of loadAccounts()) init[a.id] = true;
+    const activeBrandPageIds = brandId
+      ? new Set(loadFbPages().filter(p => p.brand_id === brandId).map(p => p.id))
+      : null;
+    for (const a of loadAccounts()) {
+      init[a.id] = activeBrandPageIds ? activeBrandPageIds.has(a.id) : true;
+    }
     return init;
   });
 

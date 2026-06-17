@@ -46,7 +46,7 @@ interface StoredFacebookPage {
   id:            string;
   name:          string;
   access_token:  string;
-  brand_id?:     string;
+  brand_id?:     string | null;
 }
 
 interface StoredInstagramAccount {
@@ -85,7 +85,7 @@ function loadFacebookPagesForSync(brandId: string): StoredFacebookPage[] {
       )
       .map(page => ({
         ...page,
-        brand_id: page.brand_id ?? brandId,
+        brand_id: page.brand_id ?? null,
       }));
   } catch (e) {
     console.error('[PostEditor] Facebook-Pages konnten nicht geladen werden:', e);
@@ -491,6 +491,7 @@ export default function PostEditor({ postId, presetDate }: Props) {
           <FacebookPublishButton
             message={form.mainText}
             mediaIds={form.mediaIds}
+            brandId={brandId}
             validationErrors={fbValidationErrors}
             onSuccess={() => handleSave('published')}
             onError={(e) => console.error(e)}
@@ -504,6 +505,7 @@ export default function PostEditor({ postId, presetDate }: Props) {
           <InstagramPublishButton
             message={form.mainText}
             mediaIds={form.mediaIds}
+            brandId={brandId}
             validationErrors={fbValidationErrors}
             onSuccess={() => handleSave('published')}
             onError={(e) => console.error(e)}
