@@ -4,8 +4,11 @@ import { cloudinary } from '@/lib/cloudinary';
 
 export async function DELETE(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  // Next 15: params ist ein Promise und muss awaited werden.
+  const { id } = await params;
+
   // Optionaler Fallback-public_id aus dem Body (Store schickt storagePath mit).
   let bodyPublicId: string | undefined;
   try {
@@ -17,7 +20,7 @@ export async function DELETE(
   const { data: row } = await supabaseAdmin
     .from('media_items')
     .select('storage_path, media_type')
-    .eq('id', params.id)
+    .eq('id', id)
     .maybeSingle();
 
   const publicId     = (row?.storage_path as string | undefined) ?? bodyPublicId;
@@ -35,7 +38,7 @@ export async function DELETE(
   const { error } = await supabaseAdmin
     .from('media_items')
     .delete()
-    .eq('id', params.id);
+    .eq('id', id);
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ success: true });
