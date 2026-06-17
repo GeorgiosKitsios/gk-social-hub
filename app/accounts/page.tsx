@@ -35,6 +35,22 @@ function saveIgAccounts(accounts: InstagramAccount[]) {
   } catch { /* ignore */ }
 }
 
+/** Spiegelt IG-Accounts fire-and-forget nach Supabase, damit der Cron-Job sie findet. */
+function syncIgAccountsToSupabase(accounts: InstagramAccount[]) {
+  if (accounts.length === 0) return;
+  fetch('/api/cron/sync', {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body:    JSON.stringify({ posts: [], facebookPages: [], instagramAccounts: accounts }),
+  })
+    .then(r => r.json())
+    .then(d => {
+      if (d.success) console.log('[Accounts] IG-Accounts nach Supabase gespiegelt:', d.igAccountsSynced);
+      else           console.warn('[Accounts] IG-Sync Antwort:', d);
+    })
+    .catch(e => console.warn('[Accounts] IG-Sync fehlgeschlagen:', e));
+}
+
 /** Eine Page kann nur bespielt werden, wenn der Nutzer dort CREATE_CONTENT darf.
  *  Ältere Verbindungen ohne tasks-Info gelten als unbekannt (true), damit sie
  *  nicht fälschlich als gesperrt erscheinen. */
@@ -67,7 +83,11 @@ function AccountsContent() {
 
   useEffect(() => {
     setFbPages(loadPages());
-    setIgAccounts(loadIgAccounts());
+    const existingIg = loadIgAccounts();
+    setIgAccounts(existingIg);
+    // Beim ersten Laden einmalig spiegeln – falls Accounts im localStorage sind,
+    // aber die Supabase-Tabelle noch leer ist (z. B. nach Migration).
+    syncIgAccountsToSupabase(existingIg);
 
     const pagesParam = searchParams.get('pages');
     const igParam    = searchParams.get('igAccounts');
@@ -99,6 +119,7 @@ function AccountsContent() {
           }
           saveIgAccounts(mergedIg);
           setIgAccounts(mergedIg);
+          syncIgAccountsToSupabase(mergedIg);
           igCount = newIg.length;
         }
 
