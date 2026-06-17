@@ -35,24 +35,25 @@ function saveIgAccounts(accounts: InstagramAccount[]) {
   } catch { /* ignore */ }
 }
 
-/** Spiegelt IG-Accounts fire-and-forget nach Supabase, damit der Cron-Job sie findet. */
+/** Spiegelt IG-Accounts fire-and-forget nach Supabase via dedizierter Route.
+ *  Nutzt service_role-Key (server-only), kein CRON_SECRET nötig. */
 function syncIgAccountsToSupabase(accounts: InstagramAccount[]) {
   if (accounts.length === 0) return;
-  fetch('/api/cron/sync', {
+  fetch('/api/ig-accounts/sync', {
     method:  'POST',
     headers: { 'Content-Type': 'application/json' },
-    body:    JSON.stringify({ posts: [], facebookPages: [], instagramAccounts: accounts }),
+    body:    JSON.stringify({ accounts }),
   })
-    .then(r => r.json())
-    .then(d => {
-      if (d.success && d.igAccountsSynced > 0)
-        console.log('[Accounts] IG-Accounts nach Supabase gespiegelt:', d.igAccountsSynced);
-      else if (!d.success)
-        console.error('[Accounts] IG-Sync fehlgeschlagen:', d.error ?? d);
-      else
-        console.warn('[Accounts] IG-Sync: 0 Accounts geschrieben (igAccountsSynced=0) – Antwort:', d);
+    .then(async r => {
+      const d = await r.json();
+      if (d.ok) {
+        console.log('[Accounts] IG-Sync OK –', d.synced, 'Account(s) in Supabase geschrieben');
+      } else {
+        console.error('[Accounts] IG-Sync FEHLER (HTTP', r.status, '):',
+          d.error, '| code:', d.code, '| details:', d.details, '| hint:', d.hint);
+      }
     })
-    .catch(e => console.warn('[Accounts] IG-Sync fehlgeschlagen:', e));
+    .catch(e => console.error('[Accounts] IG-Sync Netzwerkfehler:', e));
 }
 
 /** Eine Page kann nur bespielt werden, wenn der Nutzer dort CREATE_CONTENT darf.
