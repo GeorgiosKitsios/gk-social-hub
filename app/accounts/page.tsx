@@ -45,8 +45,12 @@ function syncIgAccountsToSupabase(accounts: InstagramAccount[]) {
   })
     .then(r => r.json())
     .then(d => {
-      if (d.success) console.log('[Accounts] IG-Accounts nach Supabase gespiegelt:', d.igAccountsSynced);
-      else           console.warn('[Accounts] IG-Sync Antwort:', d);
+      if (d.success && d.igAccountsSynced > 0)
+        console.log('[Accounts] IG-Accounts nach Supabase gespiegelt:', d.igAccountsSynced);
+      else if (!d.success)
+        console.error('[Accounts] IG-Sync fehlgeschlagen:', d.error ?? d);
+      else
+        console.warn('[Accounts] IG-Sync: 0 Accounts geschrieben (igAccountsSynced=0) – Antwort:', d);
     })
     .catch(e => console.warn('[Accounts] IG-Sync fehlgeschlagen:', e));
 }

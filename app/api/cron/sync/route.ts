@@ -147,12 +147,19 @@ export async function POST(req: NextRequest) {
       .upsert(igRows, { onConflict: 'id' });
 
     if (igError) {
-      // Nicht kritisch – Tabelle existiert möglicherweise noch nicht
-      console.warn('[SYNC] IG-Accounts Fehler (nicht kritisch):', igError.message);
-    } else {
-      igAccountsSynced = igRows.length;
-      console.log(`[SYNC] ${igRows.length} IG-Accounts gespeichert`);
+      console.error('[SYNC] IG-Accounts Upsert FEHLER:', igError.message, '| Code:', igError.code, '| Details:', igError.details);
+      return NextResponse.json({
+        success:     false,
+        error:       `IG-Sync fehlgeschlagen: ${igError.message}`,
+        code:        igError.code,
+        postsSynced: postRows.length,
+        pagesSynced: facebookPages.length,
+        igAccountsSynced: 0,
+      }, { status: 500 });
     }
+
+    igAccountsSynced = igRows.length;
+    console.log(`[SYNC] ${igRows.length} IG-Accounts gespeichert (IDs: ${igRows.map(r => r.id).join(', ')})`);
   }
 
   return NextResponse.json({

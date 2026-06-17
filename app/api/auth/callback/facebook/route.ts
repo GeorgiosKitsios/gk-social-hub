@@ -69,9 +69,9 @@ export async function GET(request: NextRequest) {
       .map(p => {
         const ig = p.instagram_business_account!;
         return {
-          id:          `ig_${ig.id}`,
+          id:          p.id,   // Facebook Page ID – Join-Schlüssel im Cron (instagram_accounts.id = facebook_pages.page_id)
           name:        ig.username ? `${p.name} (@${ig.username})` : p.name,
-          accountId:   ig.id,
+          accountId:   ig.id,  // IG Business Account ID – wird für den Graph-API-Aufruf verwendet
           accessToken: p.access_token,
         };
       });
