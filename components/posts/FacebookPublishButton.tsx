@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useMediaStore } from '@/store/useMediaStore';
 
 interface FacebookPage {
@@ -34,6 +34,25 @@ function canPost(page: FacebookPage): boolean {
   return page.tasks.includes('CREATE_CONTENT');
 }
 
+/** Robuster Brand-Vergleich – unabhängig vom Typ ('3' === 3). */
+function sameBrand(a: unknown, b: unknown): boolean {
+  if (a == null || b == null) return false;
+  return String(a) === String(b);
+}
+
+/** Standard-Vorauswahl: nur Seiten der aktiven Marke ankreuzen.
+ *  Fallback wenn KEINE Seite der Marke zugeordnet ist → alle posting-fähigen
+ *  ankreuzen (besser als „nichts ausgewählt"). */
+function computeDefaultSelection(pages: FacebookPage[], brandId?: string): Record<string, boolean> {
+  const init: Record<string, boolean> = {};
+  const anyMatch = brandId ? pages.some(p => sameBrand(p.brand_id, brandId)) : false;
+  for (const p of pages) {
+    if (brandId && anyMatch)      init[p.id] = sameBrand(p.brand_id, brandId) && canPost(p);
+    else                          init[p.id] = canPost(p);
+  }
+  return init;
+}
+
 /** Erkennt Berechtigungs-/Token-Fehler von Facebook, bei denen ein
  *  Neu-Verbinden der Seite hilft (publish_actions, fehlende Rechte usw.). */
 function isPermissionError(err?: string): boolean {
@@ -62,14 +81,24 @@ export default function FacebookPublishButton({ message, mediaIds = [], brandId,
   const pages = loadPages();
 
   // Standardauswahl: nur Pages der aktiven Marke (wenn brandId gesetzt), andere sichtbar aber abgehakt.
-  const [selected, setSelected] = useState<Record<string, boolean>>(() => {
-    const init: Record<string, boolean> = {};
-    for (const p of loadPages()) {
-      const isBrandMatch = !brandId || p.brand_id === brandId;
-      init[p.id] = isBrandMatch && canPost(p);
+  const [selected, setSelected] = useState<Record<string, boolean>>(() => computeDefaultSelection(loadPages(), brandId));
+
+  // Sobald der Nutzer selbst (ab)wählt, nicht mehr automatisch überschreiben.
+  const userTouched = useRef(false);
+
+  // brandId kann verzögert eintreffen (Zustand-Hydration). Solange der Nutzer
+  // nichts manuell geändert hat, Vorauswahl neu berechnen, wenn brandId steht.
+  useEffect(() => {
+    // TEMP DEBUG – nach Bestätigung entfernen
+    const dbgPages = loadPages();
+    console.log('[FB-Button DEBUG] brandId=', brandId, '(', typeof brandId, ')');
+    for (const p of dbgPages) {
+      console.log(`  page "${p.name}" brand_id=`, p.brand_id, '(', typeof p.brand_id, ') → match:', sameBrand(p.brand_id, brandId));
     }
-    return init;
-  });
+    if (!userTouched.current) {
+      setSelected(computeDefaultSelection(dbgPages, brandId));
+    }
+  }, [brandId]);
 
   const firstMedia  = mediaIds.length > 0 ? getById(mediaIds[0]) : null;
   const imageBase64 = firstMedia?.type === 'image' ? firstMedia.url : undefined;
@@ -99,6 +128,7 @@ export default function FacebookPublishButton({ message, mediaIds = [], brandId,
   }
 
   function toggle(pageId: string) {
+    userTouched.current = true;
     setSelected(s => ({ ...s, [pageId]: !s[pageId] }));
   }
 
@@ -218,13 +248,13 @@ export default function FacebookPublishButton({ message, mediaIds = [], brandId,
             <span className="text-xs text-neutral-400 font-medium">Seiten auswählen</span>
             <div className="flex gap-2">
               <button
-                onClick={() => setSelected(Object.fromEntries(pages.map(p => [p.id, true])))}
+                onClick={() => { userTouched.current = true; setSelected(Object.fromEntries(pages.map(p => [p.id, true]))); }}
                 disabled={loading}
                 className="text-[11px] text-neutral-500 hover:text-white transition-colors">
                 Alle
               </button>
               <button
-                onClick={() => setSelected(Object.fromEntries(pages.map(p => [p.id, false])))}
+                onClick={() => { userTouched.current = true; setSelected(Object.fromEntries(pages.map(p => [p.id, false]))); }}
                 disabled={loading}
                 className="text-[11px] text-neutral-500 hover:text-white transition-colors">
                 Keine

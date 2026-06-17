@@ -4,6 +4,7 @@ import { useEffect, useState, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useBrandStore } from '@/store/useBrandStore';
 import { BrandAvatar }   from '@/components/layout/Topbar';
+import { Brand }         from '@/lib/types';
 
 interface FacebookPage {
   id:           string;
@@ -78,6 +79,32 @@ function savePages(pages: FacebookPage[]) {
   } catch { /* ignore */ }
 }
 
+/** Ordnet eine Facebook-Page automatisch einer Marke zu – über Namensabgleich.
+ *  FB-Page-Namen entsprechen i. d. R. exakt den Markennamen ("GK Pokale" etc.).
+ *  Reihenfolge: exakter Match → Teilstring-Match. Gibt undefined zurück, wenn
+ *  keine Marke passt (dann bleibt das Dropdown als manueller Fallback). */
+function matchBrandId(pageName: string, brands: Brand[]): string | undefined {
+  const norm = (s: string) => s.toLowerCase().replace(/\s+/g, ' ').trim();
+  const pn = norm(pageName);
+  if (!pn) return undefined;
+
+  const exact = brands.find(b => norm(b.name) === pn);
+  if (exact) return exact.id;
+
+  // Längste passende Marke gewinnt (verhindert, dass "GK" fälschlich greift).
+  const partial = brands
+    .filter(b => { const bn = norm(b.name); return pn.includes(bn) || bn.includes(pn); })
+    .sort((a, b) => b.name.length - a.name.length)[0];
+  return partial?.id;
+}
+
+/** Setzt fehlende brand_id per Namensabgleich. Bereits gesetzte bleiben unberührt. */
+function autoAssignBrands(pages: FacebookPage[], brands: Brand[]): FacebookPage[] {
+  return pages.map(p =>
+    p.brand_id ? p : { ...p, brand_id: matchBrandId(p.name, brands) }
+  );
+}
+
 function AccountsContent() {
   const { brands } = useBrandStore();
   const searchParams = useSearchParams();
@@ -88,7 +115,14 @@ function AccountsContent() {
   const [message,    setMessage]    = useState<string | null>(null);
 
   useEffect(() => {
-    setFbPages(loadPages());
+    // Initiales Laden: fehlende brand_id automatisch per Namensabgleich setzen
+    // und – falls sich etwas geändert hat – zurückspeichern (Backfill für Bestand).
+    const loaded   = loadPages();
+    const assigned = autoAssignBrands(loaded, brands);
+    const changed  = assigned.some((p, i) => p.brand_id !== loaded[i]?.brand_id);
+    if (changed) savePages(assigned);
+    setFbPages(assigned);
+
     const existingIg = loadIgAccounts();
     setIgAccounts(existingIg);
     // Beim ersten Laden einmalig spiegeln – falls Accounts im localStorage sind,
@@ -107,11 +141,13 @@ function AccountsContent() {
         for (const p of newPages) {
           const idx = merged.findIndex(e => e.id === p.id);
           if (idx === -1) merged.push(p);
-          else            merged[idx] = p;
+          else            merged[idx] = { ...merged[idx], ...p, brand_id: p.brand_id ?? merged[idx].brand_id };
         }
 
-        savePages(merged);
-        setFbPages(merged);
+        // Neu verbundene Seiten automatisch ihrer Marke zuordnen (Namensabgleich).
+        const mergedAssigned = autoAssignBrands(merged, brands);
+        savePages(mergedAssigned);
+        setFbPages(mergedAssigned);
 
         // Verknüpfte Instagram-Accounts (falls vorhanden) mergen – dedupliziert nach accountId.
         let igCount = 0;

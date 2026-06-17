@@ -441,11 +441,12 @@ export default function PostEditor({ postId, presetDate }: Props) {
   }
 
   return (
-    // Outer: volle Höhe, kein overflow
-    <div className="flex flex-col" style={{ height: '100%' }}>
+    // Outer: volle Höhe, EIN durchgehender Scroll-Container (Topbar bleibt sticky).
+    // Dadurch scrollt der gesamte Editor natürlich – auch auf kleinen Bildschirmen.
+    <div className="flex flex-col h-full overflow-y-auto">
 
       {/* ── Topbar ── */}
-      <div className="flex items-center gap-2 px-4 py-3 border-b border-neutral-800 bg-neutral-950 sticky top-0 z-10 flex-wrap shrink-0">
+      <div className="flex items-center gap-2 px-4 py-3 border-b border-neutral-800 bg-neutral-950 sticky top-0 z-20 flex-wrap shrink-0">
         <button onClick={() => router.push('/posts')} className="text-neutral-400 hover:text-white text-sm transition-colors">← Posts</button>
         <div className="w-px h-4 bg-neutral-700" />
         {brand && (
@@ -513,9 +514,9 @@ export default function PostEditor({ postId, presetDate }: Props) {
         </div>
       )}
 
-      {/* ── Scrollbarer Hauptbereich ── */}
-      <div className="flex-1 overflow-y-auto">
-        <div className="flex flex-col xl:flex-row min-h-full">
+      {/* ── Hauptbereich (scrollt mit dem äußeren Container) ── */}
+      <div>
+        <div className="flex flex-col xl:flex-row">
 
           {/* Linke Spalte – Hauptinhalt */}
           <div className="flex-1 p-4 flex flex-col gap-4">
@@ -739,7 +740,7 @@ export default function PostEditor({ postId, presetDate }: Props) {
               )}
             </div>
             {/* Preview card */}
-            <div className="flex-1 overflow-y-auto">
+            <div className="flex-1">
               {form.platforms.length === 0
                 ? <p className="text-xs text-neutral-600 text-center mt-8">Keine Plattform ausgewählt.</p>
                 : <PlatformPreview

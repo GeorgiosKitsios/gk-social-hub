@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useMediaStore } from '@/store/useMediaStore';
 
 interface InstagramAccount {
@@ -40,6 +40,28 @@ function loadFbPages(): FacebookPageBrief[] {
   } catch { return []; }
 }
 
+/** Robuster Brand-Vergleich – unabhängig vom Typ ('3' === 3). */
+function sameBrand(a: unknown, b: unknown): boolean {
+  if (a == null || b == null) return false;
+  return String(a) === String(b);
+}
+
+/** Standard-Vorauswahl: IG-Accounts der aktiven Marke ankreuzen.
+ *  account.id = Facebook Page ID → über facebook_pages.brand_id der Marke zuordnen.
+ *  Fallback wenn keine Zuordnung existiert → alle ankreuzen. */
+function computeDefaultSelection(accounts: InstagramAccount[], brandId?: string): Record<string, boolean> {
+  const init: Record<string, boolean> = {};
+  const brandPageIds = brandId
+    ? new Set(loadFbPages().filter(p => sameBrand(p.brand_id, brandId)).map(p => p.id))
+    : null;
+  const anyMatch = brandPageIds ? accounts.some(a => brandPageIds.has(a.id)) : false;
+  for (const a of accounts) {
+    if (brandPageIds && anyMatch) init[a.id] = brandPageIds.has(a.id);
+    else                          init[a.id] = true;
+  }
+  return init;
+}
+
 export default function InstagramPublishButton({ message, mediaIds = [], brandId, validationErrors, onSuccess, onError }: Props) {
   const [loading,  setLoading]  = useState(false);
   const [postType, setPostType] = useState<PostType>('feed');
@@ -49,16 +71,23 @@ export default function InstagramPublishButton({ message, mediaIds = [], brandId
   const accounts     = loadAccounts();
 
   // Standardauswahl: nur Accounts der aktiven Marke (account.id = FB Page ID → brand_id lookup).
-  const [selected, setSelected] = useState<Record<string, boolean>>(() => {
-    const init: Record<string, boolean> = {};
-    const activeBrandPageIds = brandId
-      ? new Set(loadFbPages().filter(p => p.brand_id === brandId).map(p => p.id))
-      : null;
-    for (const a of loadAccounts()) {
-      init[a.id] = activeBrandPageIds ? activeBrandPageIds.has(a.id) : true;
+  const [selected, setSelected] = useState<Record<string, boolean>>(() => computeDefaultSelection(loadAccounts(), brandId));
+
+  // Sobald der Nutzer selbst (ab)wählt, nicht mehr automatisch überschreiben.
+  const userTouched = useRef(false);
+
+  // brandId kann verzögert eintreffen (Zustand-Hydration) → Vorauswahl neu berechnen.
+  useEffect(() => {
+    // TEMP DEBUG – nach Bestätigung entfernen
+    const dbgAccounts = loadAccounts();
+    const dbgPages    = loadFbPages();
+    console.log('[IG-Button DEBUG] brandId=', brandId, '(', typeof brandId, ')');
+    console.log('  FB-Pages:', dbgPages.map(p => ({ id: p.id, brand_id: p.brand_id })));
+    console.log('  IG-Accounts:', dbgAccounts.map(a => ({ id: a.id, name: a.name })));
+    if (!userTouched.current) {
+      setSelected(computeDefaultSelection(dbgAccounts, brandId));
     }
-    return init;
-  });
+  }, [brandId]);
 
   const firstMedia = mediaIds.length > 0 ? getById(mediaIds[0]) : null;
   const imageUrl   = firstMedia?.type === 'image' ? firstMedia.url  : undefined;
@@ -81,6 +110,7 @@ export default function InstagramPublishButton({ message, mediaIds = [], brandId
   const canPublish = allErrors.length === 0;
 
   function toggle(accId: string) {
+    userTouched.current = true;
     setSelected(s => ({ ...s, [accId]: !s[accId] }));
   }
 
@@ -165,13 +195,13 @@ export default function InstagramPublishButton({ message, mediaIds = [], brandId
             <span className="text-xs text-neutral-400 font-medium">Accounts auswählen</span>
             <div className="flex gap-2">
               <button
-                onClick={() => setSelected(Object.fromEntries(accounts.map(a => [a.id, true])))}
+                onClick={() => { userTouched.current = true; setSelected(Object.fromEntries(accounts.map(a => [a.id, true]))); }}
                 disabled={loading}
                 className="text-[11px] text-neutral-500 hover:text-white transition-colors">
                 Alle
               </button>
               <button
-                onClick={() => setSelected(Object.fromEntries(accounts.map(a => [a.id, false])))}
+                onClick={() => { userTouched.current = true; setSelected(Object.fromEntries(accounts.map(a => [a.id, false]))); }}
                 disabled={loading}
                 className="text-[11px] text-neutral-500 hover:text-white transition-colors">
                 Keine

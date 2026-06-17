@@ -33,6 +33,12 @@ import { publishInstagram } from '@/lib/instagram';
 
 const FB_API = 'https://graph.facebook.com/v19.0';
 
+/** Robuster Brand-Vergleich – unabhängig vom Typ ('3' === 3). */
+function sameBrand(a: unknown, b: unknown): boolean {
+  if (a == null || b == null) return false;
+  return String(a) === String(b);
+}
+
 // Prefix in error_message → Post bleibt 'scheduled', beim nächsten Cron nur IG-Retry
 const IG_PENDING_PREFIX = '__IGP__';
 
@@ -246,7 +252,7 @@ async function runPublishJob(req: NextRequest) {
           fbDone = true;
           console.log('[CRON]   FB: Übersprungen (IG-Retry, FB war bereits erfolgreich)');
         } else {
-          const pagesForBrand = fbPages.filter(p => p.brand_id === post.brand_id);
+          const pagesForBrand = fbPages.filter(p => sameBrand(p.brand_id, post.brand_id));
           console.log(`[CRON]   FB: ${pagesForBrand.length} Page(s) für Brand ${post.brand_id}`);
 
           if (pagesForBrand.length === 0) {
@@ -333,7 +339,7 @@ async function runPublishJob(req: NextRequest) {
       // ── Instagram ────────────────────────────────────────────────────────────
       if (post.platforms?.includes('instagram')) {
         // Brand-Zuordnung: instagram_accounts.id = facebook_pages.page_id
-        const brandFbPageIds     = fbPages.filter(p => p.brand_id === post.brand_id).map(p => p.page_id);
+        const brandFbPageIds     = fbPages.filter(p => sameBrand(p.brand_id, post.brand_id)).map(p => p.page_id);
         const igAccountsForBrand = igAccounts.filter(a => brandFbPageIds.includes(a.id));
 
         console.log(`[CRON]   IG: ${igAccountsForBrand.length} Account(s) für Brand ${post.brand_id}`);
