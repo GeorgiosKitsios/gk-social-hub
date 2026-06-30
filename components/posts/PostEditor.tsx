@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { usePostStore }     from '@/store/usePostStore';
 import { useTemplateStore } from '@/store/useTemplateStore';
@@ -11,6 +11,7 @@ import MediaPicker           from '@/components/media/MediaPicker';
 import AiAssistant           from '@/components/posts/AiAssistant';
 import FacebookPublishButton  from '@/components/posts/FacebookPublishButton';
 import InstagramPublishButton from '@/components/posts/InstagramPublishButton';
+import { buildFullFooter, appendFooter, applyFooterToPost } from '@/lib/postFooter';
 
 const PLATFORMS: { value: Platform; label: string }[] = [
   { value: 'facebook',  label: 'Facebook'  },
@@ -111,7 +112,7 @@ function emptyForm(brandId: string): Omit<Post, 'id' | 'createdAt' | 'updatedAt'
     brandId,
     title: '', mainText: '', platformTexts: {}, mediaIds: [],
     platforms: ['facebook', 'instagram'], platformStatus: {},
-    status: 'draft', templateIds: [], notes: '', tags: [],
+    status: 'draft', templateIds: [], notes: '', tags: [], footerText: '',
   };
 }
 
@@ -279,6 +280,15 @@ export default function PostEditor({ postId, presetDate }: Props) {
     }
   }, [postId, presetDate]);
 
+  // Footer für NEUE Posts automatisch erzeugen (Cross-Promo + Marken-Pflichtangabe).
+  // Reagiert auf die aktive Marke; manuelle Änderungen am Footer werden respektiert.
+  const footerTouched = useRef(false);
+  useEffect(() => {
+    if (isNew && !footerTouched.current && brandId) {
+      setForm(f => ({ ...f, footerText: buildFullFooter(brandId, brands) }));
+    }
+  }, [isNew, brandId, brands]);
+
   if (!brandId) {
     return (
       <div className="flex flex-col items-center justify-center h-full gap-4 text-neutral-500">
@@ -319,10 +329,13 @@ export default function PostEditor({ postId, presetDate }: Props) {
 
     const facebookPages      = loadFacebookPagesForSync(post.brandId);
     const instagramAccounts  = loadInstagramAccountsForSync();
+    // Footer in den geposteten Text einkomponieren – genau das geht an Supabase
+    // und wird vom Cron rausgeschickt (kein separater, vergessbarer Spaltenwert).
+    const postForCron = applyFooterToPost(post);
     const response = await fetch('/api/cron/sync', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ posts: [post], facebookPages, instagramAccounts }),
+      body: JSON.stringify({ posts: [postForCron], facebookPages, instagramAccounts }),
     });
 
     const data = await response.json().catch(() => null);
@@ -490,7 +503,7 @@ export default function PostEditor({ postId, presetDate }: Props) {
       {form.platforms.includes('facebook') && (
         <div className="px-4 py-2 border-b border-neutral-800 bg-neutral-950 shrink-0">
           <FacebookPublishButton
-            message={form.mainText}
+            message={appendFooter(form.mainText, form.footerText)}
             mediaIds={form.mediaIds}
             brandId={brandId}
             brandName={brand?.name}
@@ -505,7 +518,7 @@ export default function PostEditor({ postId, presetDate }: Props) {
       {form.platforms.includes('instagram') && (
         <div className="px-4 py-2 border-b border-neutral-800 bg-neutral-950 shrink-0">
           <InstagramPublishButton
-            message={form.mainText}
+            message={appendFooter(form.mainText, form.footerText)}
             mediaIds={form.mediaIds}
             brandId={brandId}
             brandName={brand?.name}
@@ -564,6 +577,31 @@ export default function PostEditor({ postId, presetDate }: Props) {
                 className="w-full bg-neutral-800 border border-neutral-700 rounded-lg px-3 py-2 text-sm text-white placeholder-neutral-500 focus:outline-none focus:border-blue-500 resize-none"
               />
               <div className="text-xs text-neutral-600 mt-1 text-right">{form.mainText.length} Zeichen</div>
+            </div>
+
+            {/* Footer (Cross-Promo + Marken-Pflichtangaben) – eigenes Feld, wird
+                beim Speichern/Planen UND beim manuellen Posten an den Text gehängt. */}
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <label className="text-xs text-neutral-400">
+                  Footer <span className="text-neutral-600">(wird automatisch mitgepostet)</span>
+                </label>
+                <button
+                  onClick={() => { footerTouched.current = false; setForm(f => ({ ...f, footerText: buildFullFooter(brandId, brands) })); }}
+                  className="text-xs text-neutral-500 hover:text-blue-400 transition-colors">
+                  ↻ Footer aktualisieren
+                </button>
+              </div>
+              <textarea
+                value={form.footerText ?? ''}
+                onChange={e => { footerTouched.current = true; setForm(f => ({ ...f, footerText: e.target.value })); }}
+                rows={2}
+                placeholder="Mehr von GK: …"
+                className="w-full bg-neutral-800 border border-neutral-700 rounded-lg px-3 py-2 text-sm text-white placeholder-neutral-500 focus:outline-none focus:border-blue-500 resize-none"
+              />
+              <div className="text-xs text-neutral-600 mt-1">
+                Leeren, wenn kein Footer gewünscht. Wird unter Haupttext bzw. Plattform-Text gehängt.
+              </div>
             </div>
 
             {/* Plattform-spezifische Texte */}
@@ -747,7 +785,7 @@ export default function PostEditor({ postId, presetDate }: Props) {
                 ? <p className="text-xs text-neutral-600 text-center mt-8">Keine Plattform ausgewählt.</p>
                 : <PlatformPreview
                     platform={activePrev}
-                    text={form.platformTexts[activePrev] ?? form.mainText}
+                    text={appendFooter(form.platformTexts[activePrev] ?? form.mainText, form.footerText)}
                     brandName={brand?.name ?? 'Marke'}
                     brandColor={brand?.color ?? '#378ADD'}
                     mediaUrl={form.mediaIds.length > 0 ? getMediaById(form.mediaIds[0])?.url : undefined}

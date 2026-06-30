@@ -13,6 +13,8 @@ export interface Brand {
   industry: string;
   /** Marken-Beschreibung für KI – fließt als erster Kontext-Block in alle KI-Prompts ein */
   description?: string;
+  /** Instagram-Handle (inkl. @) – zentrale Quelle für den Cross-Promo-Footer */
+  instagramHandle?: string;
   aiTone: AiTone;
   aiLanguage: 'de' | 'en';
   platforms: Platform[];
@@ -43,6 +45,9 @@ export interface Post {
   boardColumn?: string;
   /** Instagram-Format für geplante Posts: Feed-Post (Standard) oder Story */
   igPostType?: 'feed' | 'story';
+  /** Eigenständiges Footer-Feld (Cross-Promo + Marken-Pflichtangaben).
+   *  Wird beim Speichern/Planen in den geposteten Text einkomponiert. */
+  footerText?: string;
   tags: string[];
   createdAt: string;
   updatedAt: string;
