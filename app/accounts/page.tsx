@@ -5,6 +5,7 @@ import { useSearchParams } from 'next/navigation';
 import { useBrandStore } from '@/store/useBrandStore';
 import { BrandAvatar }   from '@/components/layout/Topbar';
 import { Brand }         from '@/lib/types';
+import { sameBrand, nameBelongsToBrand } from '@/lib/facebookPages';
 
 interface FacebookPage {
   id:           string;
@@ -356,9 +357,25 @@ function AccountsContent() {
             </div>
             <div className="flex flex-col gap-1.5">
               {brand.platforms.map(p => {
-                const label     = p === 'facebook' ? 'Facebook' : p === 'instagram' ? 'Instagram' : 'TikTok';
-                const connected = (p === 'facebook'  && fbPages.length > 0)
-                               || (p === 'instagram' && igAccounts.length > 0);
+                const label = p === 'facebook' ? 'Facebook' : p === 'instagram' ? 'Instagram' : 'TikTok';
+
+                // Echte, markenbezogene Zuordnung (gleiche Logik wie die Editor-Vorauswahl):
+                // eine Seite/ein Account gehört zur Marke per Supabase-brand_id ODER Namensabgleich.
+                // IG-Account.id = Facebook page_id → zusätzlich über die zugehörige FB-Seite matchen.
+                const fbConnected = fbPages.some(pg =>
+                  sameBrand(pg.brand_id, brand.id) || nameBelongsToBrand(pg.name, brand.name)
+                );
+                const igConnected = igAccounts.some(acc =>
+                  nameBelongsToBrand(acc.name, brand.name) ||
+                  fbPages.some(pg => pg.id === acc.id &&
+                    (sameBrand(pg.brand_id, brand.id) || nameBelongsToBrand(pg.name, brand.name)))
+                );
+                const connected = (p === 'facebook' && fbConnected)
+                               || (p === 'instagram' && igConnected);
+
+                // Georgios Kitsios ist ein privates Profil und nicht bepostbar.
+                const isPrivateProfile = brand.slug === 'georgios-kitsios' && p === 'facebook';
+
                 return (
                   <div key={p} className="flex items-center justify-between py-1.5 border-t border-neutral-700/50">
                     <div className="flex items-center gap-2">
@@ -370,6 +387,11 @@ function AccountsContent() {
                       }`}>
                         {connected ? '✓ Verbunden' : '– Nicht verbunden'}
                       </span>
+                      {isPrivateProfile && (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-400 border border-amber-500/20">
+                          privates Profil · nicht postbar
+                        </span>
+                      )}
                     </div>
                     {p === 'tiktok' && (
                       <span className="text-xs text-neutral-600 italic">folgt in Phase 3</span>
