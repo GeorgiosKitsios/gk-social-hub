@@ -493,6 +493,7 @@ export default function PostEditor({ postId, presetDate }: Props) {
             message={form.mainText}
             mediaIds={form.mediaIds}
             brandId={brandId}
+            brandName={brand?.name}
             validationErrors={fbValidationErrors}
             onSuccess={() => handleSave('published')}
             onError={(e) => console.error(e)}
@@ -507,6 +508,7 @@ export default function PostEditor({ postId, presetDate }: Props) {
             message={form.mainText}
             mediaIds={form.mediaIds}
             brandId={brandId}
+            brandName={brand?.name}
             validationErrors={fbValidationErrors}
             onSuccess={() => handleSave('published')}
             onError={(e) => console.error(e)}

@@ -41,6 +41,7 @@ export const useTemplateStore = create<TemplateStore>()(
       deleteTemplate: (id) =>
         set(s => ({ templates: s.templates.filter(t => t.id !== id) })),
     }),
-    { name: 'gk-template-store' }
+    // SSR-sicher: erst nach Mount rehydrieren (siehe StoreHydration) → kein #418.
+    { name: 'gk-template-store', skipHydration: true }
   )
 );

@@ -116,6 +116,8 @@ export const usePostStore = create<PostStore>()(
     }),
     {
       name:    'gk-post-store',
+      // SSR-sicher: erst nach Mount rehydrieren (siehe StoreHydration) → kein #418.
+      skipHydration: true,
       // Explizit localStorage als Storage angeben
       storage: {
         getItem: (name) => {

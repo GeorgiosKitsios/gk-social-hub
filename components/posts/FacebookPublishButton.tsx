@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { useMediaStore } from '@/store/useMediaStore';
+import { fetchSupabaseFbPages, nameBelongsToBrand, sameBrand, type SupabaseFbPage } from '@/lib/facebookPages';
 
 interface FacebookPage {
   id:           string;
@@ -15,6 +16,7 @@ interface Props {
   message:           string;
   mediaIds?:         string[];
   brandId?:          string;
+  brandName?:        string;
   validationErrors?: string[];
   onSuccess?:        (postId: string, pageName: string) => void;
   onError?:          (error: string) => void;
@@ -34,21 +36,26 @@ function canPost(page: FacebookPage): boolean {
   return page.tasks.includes('CREATE_CONTENT');
 }
 
-/** Robuster Brand-Vergleich – unabhängig vom Typ ('3' === 3). */
-function sameBrand(a: unknown, b: unknown): boolean {
-  if (a == null || b == null) return false;
-  return String(a) === String(b);
-}
-
-/** Standard-Vorauswahl: nur Seiten der aktiven Marke ankreuzen.
- *  Fallback wenn KEINE Seite der Marke zugeordnet ist → alle posting-fähigen
- *  ankreuzen (besser als „nichts ausgewählt"). */
-function computeDefaultSelection(pages: FacebookPage[], brandId?: string): Record<string, boolean> {
+/** Vorauswahl der Seiten der aktiven Marke.
+ *  Reihenfolge: Supabase-brand_id (autoritativ) → Namensabgleich → nichts.
+ *  Die veraltete localStorage-brand_id wird bewusst NICHT als Fallback genutzt
+ *  (lieber nichts vorauswählen als falsch). */
+function computeDefaultSelection(
+  pages:     FacebookPage[],
+  brandId:   string | undefined,
+  brandName: string | undefined,
+  supa:      SupabaseFbPage[] | null,
+): Record<string, boolean> {
+  const supaMap = supa ? new Map(supa.map(p => [p.page_id, p.brand_id])) : null;
   const init: Record<string, boolean> = {};
-  const anyMatch = brandId ? pages.some(p => sameBrand(p.brand_id, brandId)) : false;
   for (const p of pages) {
-    if (brandId && anyMatch)      init[p.id] = sameBrand(p.brand_id, brandId) && canPost(p);
-    else                          init[p.id] = canPost(p);
+    let belongs: boolean | null = null;            // null = unbekannt
+    if (supaMap) {
+      const b = supaMap.get(p.id);
+      if (b != null) belongs = sameBrand(b, brandId);
+    }
+    if (belongs === null && brandName) belongs = nameBelongsToBrand(p.name, brandName);
+    init[p.id] = belongs === true && canPost(p);    // unbekannt/false → nicht vorauswählen
   }
   return init;
 }
@@ -71,34 +78,32 @@ function isPermissionError(err?: string): boolean {
 type PostVariant = 'text' | 'image' | 'video_feed' | 'video_reel';
 type PostMode    = 'feed' | 'story';
 
-export default function FacebookPublishButton({ message, mediaIds = [], brandId, validationErrors, onSuccess, onError }: Props) {
+export default function FacebookPublishButton({ message, mediaIds = [], brandId, brandName, validationErrors, onSuccess, onError }: Props) {
   const [loading,        setLoading]        = useState(false);
   const [postMode,       setPostMode]       = useState<PostMode>('feed');
   const [showTypePicker, setShowTypePicker] = useState(false);
   const [results,        setResults]        = useState<{ page: string; success: boolean; error?: string }[]>([]);
 
   const { getById } = useMediaStore();
-  const pages = loadPages();
 
-  // Standardauswahl: nur Pages der aktiven Marke (wenn brandId gesetzt), andere sichtbar aber abgehakt.
-  const [selected, setSelected] = useState<Record<string, boolean>>(() => computeDefaultSelection(loadPages(), brandId));
+  // SSR-sicher: localStorage erst nach dem Mount lesen (Initialwert leer = wie Server).
+  const [pages,    setPages]    = useState<FacebookPage[]>([]);
+  const [selected, setSelected] = useState<Record<string, boolean>>({});
 
   // Sobald der Nutzer selbst (ab)wählt, nicht mehr automatisch überschreiben.
   const userTouched = useRef(false);
 
-  // brandId kann verzögert eintreffen (Zustand-Hydration). Solange der Nutzer
-  // nichts manuell geändert hat, Vorauswahl neu berechnen, wenn brandId steht.
+  // Nach Mount: Seiten laden + Vorauswahl bestimmen (Supabase → Namensabgleich → nichts).
   useEffect(() => {
-    // TEMP DEBUG – nach Bestätigung entfernen
-    const dbgPages = loadPages();
-    console.log('[FB-Button DEBUG] brandId=', brandId, '(', typeof brandId, ')');
-    for (const p of dbgPages) {
-      console.log(`  page "${p.name}" brand_id=`, p.brand_id, '(', typeof p.brand_id, ') → match:', sameBrand(p.brand_id, brandId));
-    }
-    if (!userTouched.current) {
-      setSelected(computeDefaultSelection(dbgPages, brandId));
-    }
-  }, [brandId]);
+    const local = loadPages();
+    setPages(local);
+    let cancelled = false;
+    fetchSupabaseFbPages().then(supa => {
+      if (cancelled || userTouched.current) return;
+      setSelected(computeDefaultSelection(local, brandId, brandName, supa));
+    });
+    return () => { cancelled = true; };
+  }, [brandId, brandName]);
 
   const firstMedia  = mediaIds.length > 0 ? getById(mediaIds[0]) : null;
   const imageBase64 = firstMedia?.type === 'image' ? firstMedia.url : undefined;

@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { useMediaStore } from '@/store/useMediaStore';
+import { fetchSupabaseFbPages, nameBelongsToBrand, sameBrand, type SupabaseFbPage } from '@/lib/facebookPages';
 
 interface InstagramAccount {
   id:          string;
@@ -10,15 +11,11 @@ interface InstagramAccount {
   accessToken: string;
 }
 
-interface FacebookPageBrief {
-  id:       string;
-  brand_id?: string | null;
-}
-
 interface Props {
   message:           string;
   mediaIds?:         string[];
   brandId?:          string;
+  brandName?:        string;
   validationErrors?: string[];
   onSuccess?:        (postId: string, accountName: string) => void;
   onError?:          (error: string) => void;
@@ -33,61 +30,54 @@ function loadAccounts(): InstagramAccount[] {
   } catch { return []; }
 }
 
-function loadFbPages(): FacebookPageBrief[] {
-  try {
-    const raw = localStorage.getItem('gk-facebook-pages');
-    return raw ? JSON.parse(raw) : [];
-  } catch { return []; }
-}
-
-/** Robuster Brand-Vergleich – unabhängig vom Typ ('3' === 3). */
-function sameBrand(a: unknown, b: unknown): boolean {
-  if (a == null || b == null) return false;
-  return String(a) === String(b);
-}
-
-/** Standard-Vorauswahl: IG-Accounts der aktiven Marke ankreuzen.
- *  account.id = Facebook Page ID → über facebook_pages.brand_id der Marke zuordnen.
- *  Fallback wenn keine Zuordnung existiert → alle ankreuzen. */
-function computeDefaultSelection(accounts: InstagramAccount[], brandId?: string): Record<string, boolean> {
+/** Vorauswahl der IG-Accounts der aktiven Marke.
+ *  account.id = Facebook Page ID → Zuordnung autoritativ über Supabase-brand_id,
+ *  sonst Namensabgleich, sonst nichts (lieber leer als falsch). */
+function computeDefaultSelection(
+  accounts:  InstagramAccount[],
+  brandId:   string | undefined,
+  brandName: string | undefined,
+  supa:      SupabaseFbPage[] | null,
+): Record<string, boolean> {
+  const supaMap = supa ? new Map(supa.map(p => [p.page_id, p.brand_id])) : null;
   const init: Record<string, boolean> = {};
-  const brandPageIds = brandId
-    ? new Set(loadFbPages().filter(p => sameBrand(p.brand_id, brandId)).map(p => p.id))
-    : null;
-  const anyMatch = brandPageIds ? accounts.some(a => brandPageIds.has(a.id)) : false;
   for (const a of accounts) {
-    if (brandPageIds && anyMatch) init[a.id] = brandPageIds.has(a.id);
-    else                          init[a.id] = true;
+    let belongs: boolean | null = null;            // null = unbekannt
+    if (supaMap) {
+      const b = supaMap.get(a.id);
+      if (b != null) belongs = sameBrand(b, brandId);
+    }
+    if (belongs === null && brandName) belongs = nameBelongsToBrand(a.name, brandName);
+    init[a.id] = belongs === true;                 // unbekannt/false → nicht vorauswählen
   }
   return init;
 }
 
-export default function InstagramPublishButton({ message, mediaIds = [], brandId, validationErrors, onSuccess, onError }: Props) {
+export default function InstagramPublishButton({ message, mediaIds = [], brandId, brandName, validationErrors, onSuccess, onError }: Props) {
   const [loading,  setLoading]  = useState(false);
   const [postType, setPostType] = useState<PostType>('feed');
   const [results,  setResults]  = useState<{ account: string; success: boolean; error?: string }[]>([]);
 
   const { getById }  = useMediaStore();
-  const accounts     = loadAccounts();
 
-  // Standardauswahl: nur Accounts der aktiven Marke (account.id = FB Page ID → brand_id lookup).
-  const [selected, setSelected] = useState<Record<string, boolean>>(() => computeDefaultSelection(loadAccounts(), brandId));
+  // SSR-sicher: localStorage erst nach dem Mount lesen (Initialwert leer = wie Server).
+  const [accounts, setAccounts] = useState<InstagramAccount[]>([]);
+  const [selected, setSelected] = useState<Record<string, boolean>>({});
 
   // Sobald der Nutzer selbst (ab)wählt, nicht mehr automatisch überschreiben.
   const userTouched = useRef(false);
 
-  // brandId kann verzögert eintreffen (Zustand-Hydration) → Vorauswahl neu berechnen.
+  // Nach Mount: Accounts laden + Vorauswahl bestimmen (Supabase → Namensabgleich → nichts).
   useEffect(() => {
-    // TEMP DEBUG – nach Bestätigung entfernen
-    const dbgAccounts = loadAccounts();
-    const dbgPages    = loadFbPages();
-    console.log('[IG-Button DEBUG] brandId=', brandId, '(', typeof brandId, ')');
-    console.log('  FB-Pages:', dbgPages.map(p => ({ id: p.id, brand_id: p.brand_id })));
-    console.log('  IG-Accounts:', dbgAccounts.map(a => ({ id: a.id, name: a.name })));
-    if (!userTouched.current) {
-      setSelected(computeDefaultSelection(dbgAccounts, brandId));
-    }
-  }, [brandId]);
+    const local = loadAccounts();
+    setAccounts(local);
+    let cancelled = false;
+    fetchSupabaseFbPages().then(supa => {
+      if (cancelled || userTouched.current) return;
+      setSelected(computeDefaultSelection(local, brandId, brandName, supa));
+    });
+    return () => { cancelled = true; };
+  }, [brandId, brandName]);
 
   const firstMedia = mediaIds.length > 0 ? getById(mediaIds[0]) : null;
   const imageUrl   = firstMedia?.type === 'image' ? firstMedia.url  : undefined;

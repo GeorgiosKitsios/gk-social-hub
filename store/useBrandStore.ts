@@ -42,6 +42,10 @@ export const useBrandStore = create<BrandStore>()(
     }),
     {
       name: 'gk-brand-store',
+      // SSR-sicher: nicht automatisch beim Erstellen rehydrieren, sondern erst
+      // nach dem Mount via StoreHydration. Verhindert Hydration-Mismatch (#418),
+      // da Server- und erster Client-Render identisch die Defaults zeigen.
+      skipHydration: true,
       storage: {
         getItem: (name) => {
           try {

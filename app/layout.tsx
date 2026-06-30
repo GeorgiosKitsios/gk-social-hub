@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import './globals.css';
 import Topbar from '@/components/layout/Topbar';
 import Sidebar from '@/components/layout/Sidebar';
+import StoreHydration from '@/components/StoreHydration';
 
 export const metadata: Metadata = {
   title: 'GK Social Hub',
@@ -12,6 +13,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="de" className="dark">
       <body className="bg-neutral-950 text-white antialiased">
+        <StoreHydration />
         <Topbar />
         <div className="flex h-[calc(100vh-3.5rem)]">
           <Sidebar />
